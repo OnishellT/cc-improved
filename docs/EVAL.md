@@ -130,3 +130,139 @@ Los scripts quedaron en el scratchpad de la sesión (`eval-run/tools/`), no en e
 - `grade2.sh` y `shim.py`: copiados de la eval anterior.
 
 Los resultados crudos (streams, logs, notas por celda) no se suben.
+
+---
+
+# Eval v2: D0s y D1v2, con setup hecho una vez por opus (issue #73)
+
+Fecha: 2026-10-23. Coste total: **$7.32** (tope duro: $9): setups $4.94, D0s $0.26, D1v2 $2.12. Plugin medido: `cc-improved` en `origin/main` **`ed78bbc9ba45a10833ce712240f9269d89e337c9`** (con #67, #68 y #69), sin cambios durante la eval. Reutiliza los datos de la eval anterior (D0 y D1 de arriba): no se repitieron ni A ni C+. Mismas 10 celdas, mismo grader (`grade2.sh` y `shim.py`) y mismos tickets y pistas.
+
+**Hay una sola ejecución por celda (n=1).** Diferencias de unos pocos tests, o de unos centavos, están dentro del ruido. Además, las ejecuciones de v2 se lanzaron de 4 a 8 a la vez para ahorrar reloj; el tiempo de pared no es comparable con el de v1.
+
+## Resumen
+
+| Brazo | Setup | Tareas | Tests ocultos | Coste ejecución | Coste con setup/10 | Tiempo medio |
+|---|---|---|---|---|---|---|
+| D0 (v1: haiku, sin plugin, sin setup) | no | 10 | 322 | $0.26 | $0.26 | 99 s |
+| D0s (haiku, sin plugin, con setup) | sí | 10 | 343 | $0.26 | $0.75 | 93 s |
+| D1 (v1: plugin, sin setup, sin recortes) | no | 10 | 337 | $2.41 | $2.41 | 285 s |
+| D1v2 (plugin actual, con setup) | sí | 10 | 333 | $2.12 | $2.61 | 294 s |
+
+"Coste con setup/10" suma a cada tarea la décima parte del coste de los 7 setups ($4.94 / 10 = $0.49). Con 20 tareas por proyecto serían $0.25 por tarea: D0s $0.51 y D1v2 $2.37 por 10 celdas. Los tests ocultos suman las 10 celdas (ciega 5 + con pista 5); el total posible es 436.
+
+Por variante:
+
+| Brazo | Ciega: tests | Ciega: coste | Con pista: tests | Con pista: coste |
+|---|---|---|---|---|
+| D0 (v1) | 160/204 | $0.15 | 162/232 | $0.11 |
+| D0s | 160/204 | $0.15 | 183/232 | $0.11 |
+| D1 (v1) | 144/204 | $1.35 | 193/232 | $1.06 |
+| D1v2 | 147/204 | $1.31 | 186/232 | $0.81 |
+
+## Detalle por celda
+
+Tests ocultos que pasan / total, coste y tiempo. "base" son los tests que pasan sin tocar nada. Los valores de D0 y D1 son los de la eval anterior.
+
+### Ciega
+
+| Tarea | base | D0 (v1) | D0s | D1 (v1) | D1v2 |
+|---|---|---|---|---|---|
+| pr58 (#6) | 0/20 | 0/20, $0.03 | 3/20, $0.02, 85 s | 0/20, $0.27 | 1/20, $0.13, 268 s |
+| pr53 (#52) | 10/11 | 10/11, $0.03 | 10/11, $0.03, 107 s | 10/11, $0.23 | 10/11, $0.24, 378 s |
+| pr198 (#192) | 69/72 | 69/72, $0.04 | 70/72, $0.04, 145 s | 69/72, $0.32 | 69/72, $0.38, 446 s |
+| pr84 (#8) | 0/23 | 9/23, $0.02 | 10/23, $0.02, 70 s | 4/23, $0.21 | 6/23, $0.22, 288 s |
+| pr223 (#222) | 61/78 | 72/78, $0.03 | 67/78, $0.04, 141 s | 61/78, $0.31 | 61/78, $0.34, 380 s |
+
+### Con pista
+
+| Tarea | base | D0 (v1) | D0s | D1 (v1) | D1v2 |
+|---|---|---|---|---|---|
+| pr58 (#6) | 0/20 | 20/20, $0.02 | 20/20, $0.02, 62 s | 20/20, $0.19 | 20/20, $0.12, 197 s |
+| pr84 (#8) | 0/23 | 14/23, $0.02 | 14/23, $0.02, 55 s | 16/23, $0.19 | 17/23, $0.11, 177 s |
+| pr223 (#222) | 61/78 | 70/78, $0.04 | 70/78, $0.04, 111 s | 70/78, $0.30 | 70/78, $0.29, 328 s |
+| pr51 (#5) | 0/85 | 38/85, $0.02 | 59/85, $0.02, 75 s | 70/85, $0.19 (límite de sesión) | 61/85, $0.19, 300 s |
+| pr64 (#7) | 0/26 | 20/26, $0.02 | 20/26, $0.02, 71 s | 17/26, $0.19 | 18/26, $0.11, 172 s |
+
+## Coste del setup
+
+Se corrió `/cc-improved:setup` (modelo `claude-opus-5-5`, por el `model: opus` de la skill) una vez en una copia de cada commit base de la eval. Son 7 copias, no 5: el repo es siempre `thereelcapital`, pero cada tarea parte de un commit base distinto, y un `CLAUDE.md` o unas skills escritos sobre código posterior habrían filtrado el futuro a las tareas viejas.
+
+| Copia (base de) | Coste | Turnos | Tiempo | Celdas que la usan |
+|---|---|---|---|---|
+| pr58 | **$0.98** ($0.61 + $0.37 de reanudación) | 14 + 7 | 90 s + 37 s | ciega y pista |
+| pr53 | $0.59 | 15 | 97 s | ciega |
+| pr198 | $0.77 | 18 | 108 s | ciega |
+| pr84 | $0.68 | 15 | 101 s | ciega y pista |
+| pr223 | $0.71 | 14 | 111 s | ciega y pista |
+| pr51 | $0.52 | 13 | 85 s | pista |
+| pr64 | $0.69 | 16 | 104 s | pista |
+| **Total** | **$4.94** (media $0.71, de $0.52 a $0.98) | | | |
+
+Todo el gasto es de `claude-opus-5-5`; ninguno superó el máximo de $3. Amortizado: $0.49 por tarea con 10 tareas y $0.25 con 20.
+
+### Piloto y proyección
+
+El piloto (pr58) costó $0.61 y quedó a medias (ver más abajo): $0.98 al reanudarlo. Con eso se proyectó para 5 setups unos $4.9, más D0s (~$0.04 por celda) y D1v2 (~$0.25 por celda, por la eval v1), unos $7.5 con 10 celdas: cabía bajo $9. Se hicieron primero los 4 setups restantes de la variante ciega y las 8 celdas que cubren; con $5.8 gastados quedaban $3.2, y se vio que cabían los setups de pr51 y pr64 ($1.2) y sus 4 ejecuciones ($0.5), hasta $7.3.
+
+### Cómo se resolvió el setup en `-p`
+
+- **Sin entrevista.** El prompt (`/cc-improved:setup MODO NO INTERACTIVO ...`) dice que no hay interlocutor, prohíbe `AskUserQuestion` y da las respuestas: idioma Español, sin conectores, sin agentlint, `verify = bun test`, una sola herramienta python en `tools/verify/` con `--help`, como mucho 3 skills de dominio, glosario corto y terminar el paso 9 sin pedir confirmación. El dominio lo deduce del código y de `docs/`, y lo no resuelto queda anotado en `CLAUDE.md`. Texto en el scratchpad (`eval-v2/tools/setup-prompt.txt`).
+- **Permisos.** Con `--permission-mode acceptEdits`, la primera ejecución no pudo escribir en `.claude/skills/` (Claude Code protege `.claude/`, aunque `Write` estuviera permitido en `--settings`). Dejó el setup en `pending`, lo dijo con claridad y no intentó saltarse el bloqueo. Se reanudó con `--permission-mode bypassPermissions` y terminó en `setup: done`. Los otros seis setups se hicieron directamente con `bypassPermissions`, que es lo que hace falta para correr `/setup` en `-p`.
+- **Qué generó** en cada copia (el repo ya traía `CLAUDE.md` y 4 skills): `CLAUDE.md` ampliado (de 56 a 64-98 líneas), `verify-app`, 1 skill `domain-*` (4 en pr198), de 1 a 3 ADR sacados del código, `GLOSSARY.md` (en algunas copias), una herramienta python estándar (`tools/verify/unit_tests.py`; `run_tests.py` en pr51), y `.claude/workflow.json` con `setup: done`, `verify: ["bun test"]` (en pr198, `bun test ./src/lib ./scripts`) y la herramienta. No se usaron herramientas `nix` (el repo no tiene nada que lo pida). No hay lint, typecheck ni build en estas bases, así que la herramienta solo envuelve `bun test` y resume el resultado en una línea JSON. Los documentos salieron en inglés, no en español: el `CLAUDE.md` del repo exige docs en inglés y el modelo lo antepuso.
+
+## Revisión, ruta rápida y plan mode en D1v2
+
+| Celda | Camino | plan-check | Revisión pedida |
+|---|---|---|---|
+| ciega pr58 | `wf-plan-validate` y después plan mode | no | `reviewer-sonnet` |
+| ciega pr53, pr198, pr223, pr84 | plan mode | `plan-check-sonnet` | `reviewer-sonnet` |
+| pista pr223, pr51 | plan mode | `plan-check-sonnet` | `reviewer-sonnet` |
+| pista pr84 | plan mode | no | `reviewer-sonnet` |
+| pista pr58, pr64 | **ruta rápida** (`wf-plan-validate`, sin plan mode) | no | `reviewer-sonnet` |
+
+- **Revisión:** se pidió en 10 de 10 tareas, siempre con la variante `-sonnet`. No se registró el nivel (`none|low|high`) en el stream, y con `strong_model: sonnet` los niveles `low` y `high` usan el mismo agent, así que lo único seguro es que ninguna fue `none`. D-008 podía omitirla en cambios pequeños y no lo hizo en ninguna; en pr58 y pr53 el implementer dejó commits y el diff de trabajo que mide `assessRisk` quedó vacío (ver "Bugs"), así que la revisión se pidió por otra razón (por ejemplo, la falta de un plan validado por el hook o las decisiones nuevas), que no se registró.
+- **plan-check:** 6 de 10 (antes, 10 de 10). Eran todas `-sonnet`.
+- **Ruta rápida:** solo en 2 de 10 (pista pr58 y pr64). En ciega pr58 el modelo la intentó y pasó a plan mode. En el resto el ticket no da todos los nombres y la ruta no aplica, que es lo esperado de D-009.
+- **Modelos:** D1v2 gastó $0.80 + $0.53 = $1.33 en `claude-sonnet-5-5` y $0.79 en `claude-haiku-5-5` (ciega $0.80 y $0.51, pista $0.53 y $0.29). Sonnet es el 63 % del coste. Con `strong_model: sonnet`, el modelo "fuerte" es siempre sonnet y nunca llega a opus; el coste de opus en D1v2 es 0 (solo el setup).
+
+## Fallos de D1v2
+
+| Celda | Resultado | Clase | Qué pasó |
+|---|---|---|---|
+| ciega pr58 | 1/20 | nombres + forma de argumentos | Igual que en v1: `canReserveSlot` y compañía devuelven una forma distinta de la esperada (un objeto, no un booleano) y los códigos de rechazo no coinciden. El setup no ayudó: ninguna de sus skills lo dice. |
+| ciega pr84 | 6/23 | nombres | Faltan `activateTrailing`, `validate*Pct` y `DEFAULT_*` en los archivos que importan los tests (el ticket no los nombra). |
+| ciega pr223 | 61/78 (= base) | nombres | Falta `renameClient`: el modelo preguntó por el nombre y el host eligió la primera opción, `updateClientName (Recommended)`, que era la equivocada. D0 y D0s, sin preguntar, lo acertaron (72 y 67 de 78). |
+| ciega pr198 | 69/72 (= base) | nombre / forma | Falla el test que espera la configuración y los límites fijos en el detalle del cliente (`updateClientSettings`). Igual que D0 y D1 en v1. |
+| ciega pr53 | 10/11 (= base) | requisito no explícito | Festivos NYSE 2026/2027, igual que en los cuatro brazos de v1. |
+| pista pr84 | 17/23 | verify / revisión (robustez) | `activateTrailing` no lanza `RangeError` con valores fuera de rango. El ticket lo pide; ni los tests propios ni el reviewer lo cubrieron. |
+| pista pr223 | 70/78 | verify / revisión (robustez) | `renameClient` no rechaza el nombre con salto de línea ni los casos de concurrencia. Igual que D0, D0s y D1. |
+| pista pr51 | 61/85 | verify / revisión (robustez) | `validateSizeChange` no lanza `RangeError` ante dinero inválido. Se perdieron 9 tests respecto de D1 v1, pero aquella ejecución terminó por un límite de sesión justo después de lanzar el reviewer, así que no es comparable. |
+| pista pr64 | 18/26 | lógica / robustez | Falla el redondeo al incremento de equities tras restar fills parciales (y hay fallos en la validación de incrementos). |
+
+Recuento: nombres o forma, 4 celdas (todas ciegas); robustez de entradas inválidas que ni los tests propios ni el reviewer cubren, 4; requisito no explícito, 1. No hubo fallos del plugin ni del host. Las 10 ejecuciones de D1v2 y las 10 de D0s terminaron con `subtype: success`, sin límite de coste ni de sesión.
+
+## Qué se recortó
+
+- **Setups:** 7 (uno por commit base), no 5. No se recortó ninguno; ver arriba por qué no es uno por repo.
+- **Celdas:** ninguna: las 10 celdas de v1 corrieron en D0s y D1v2. Solo se recortó lo ya declarado en v1 (sin A ni C+, sin pista en pr53 y pr198).
+- **Revisión y plan-check de D1v2:** `strong_model: sonnet`, igual que en D1 (v1), para que la comparación sea limpia. Con `opus` el coste de las revisiones de nivel alto habría sido mayor y no se midió.
+- **Qué no se midió:** el desglose por componente (orquestador, implementer, plan-check, reviewer) que pide el issue, solo se tiene por modelo (`modelUsage`): el stream de `-p` trae el coste total y el de cada modelo, pero no el de cada subagente. Tampoco se midió D1v2 sin setup, así que el efecto de los recortes (#67, #68, #69) y el del setup se ven mezclados al comparar D1 con D1v2.
+
+## Conclusión
+
+- **Calidad.** Con setup o sin él, los tests ocultos son casi iguales: D0 322, D0s 343, D1 337, D1v2 333 sobre 436. Con n=1 por celda, las diferencias de 10 tests o menos son ruido. La única mejora clara es D0s con pista (183 contra 162), casi toda de pr51 (59 contra 38) y de un solo ticket, así que tampoco es concluyente. En la variante ciega, el setup no movió a D0 (160 y 160), y D1v2 (147) sigue por debajo de D0s: los fallos son de nombres y de robustez, y el setup no los corrige.
+- **Coste.** D1v2 costó $2.12 contra $2.41 de D1 (-12 %), con un número de tests casi idéntico (333 y 337). Es un ahorro modesto, no el recorte que esperaban #67, #68 y #69: la revisión sigue pidiéndose en el 100 % de las tareas (aunque ya en `-sonnet`) y plan mode sigue en el 80 %. D1v2 sigue costando 8 veces más que D0s ($2.12 contra $0.26) sin dar más tests.
+- **Setup.** Cuesta unos $0.71 por commit base (2.7 veces lo que cuestan las 10 tareas de D0s). Con 10 tareas por proyecto añade $0.49 por tarea y con 20, $0.25. Se amortiza solo si las tareas son muchas o si su efecto en calidad es real; en esta eval no se vio un efecto en la variante ciega y solo uno incierto en la de pista.
+- **Respuesta honesta.** Con estos datos, **el flujo no baja costes manteniendo la calidad**: la calidad se mantiene (lo que está dentro del ruido), pero el coste con el plugin sigue siendo unas 8 veces el de Claude Code sin plugin con el mismo setup, y el setup no se paga en 10 ni 20 tareas. El flujo sí aporta lo que esta eval no mide: bloqueos por verify, contrato y nombres, y una revisión. Quien las valore pagará ese sobrecoste; quien mida solo tests ocultos por dólar, no. Habría que repetir con varias ejecuciones por celda antes de afirmar nada más fino.
+
+## Bugs y observaciones (sin cambios de código en esta PR)
+
+1. **`/setup` en `-p` con `acceptEdits` no puede terminar.** Escribir en `.claude/skills/` se deniega y el setup queda en `pending`. No es un bug del plugin, pero la skill y el README no lo dicen: para automatizar `/setup` hay que usar `bypassPermissions` o una regla `allow` específica para `.claude/`.
+2. **El diff del brief del reviewer queda vacío cuando el implementer hace commits.** En ciega pr58 y pr53 el implementer creó una rama y commits (lo pide el `CONTRIBUTING.md` del repo) y `git diff HEAD` salió vacío (`changedFiles` 0 en ambas). En pr58 el orquestador tuvo que guardar el diff de la rama en `/tmp` a mano y el brief llevó un marcador de posición; el reviewer leyó los archivos directamente. `lib/risk.ts` mide con `git diff HEAD --numstat` y `lib/hooks/stop.ts` manda al reviewer el diff de `git diff HEAD`: con commits, ambos ven un cambio vacío y subestiman el tamaño. Habría que medir contra la base de la rama.
+3. **La ruta rápida solo se usó en 2 de 10 tareas.** Sirve cuando el ticket (o la pista) da todos los nombres; en la variante ciega nunca se aplicó con éxito. D-009 acierta en el diseño, pero el ahorro de plan mode llega a pocas tareas reales.
+4. **No se registra el nivel de revisión.** Ni el stream ni el estado guardan `none|low|high`, así que no se puede medir qué parte de las revisiones fueron de nivel alto. Conviene escribirlo en `tasks.jsonl` o en el brief.
+5. **Idioma.** Con `language: Español`, el setup escribió los docs en inglés porque el `CLAUDE.md` del repo lo exige. Es razonable, pero la skill debería decir cuál gana.
+
+## Reproducir
+
+Todo está en el scratchpad de la sesión (`eval-v2/`), fuera del repo: `tools/setup.sh <pr>` (setup con opus en un clon del commit base), `tools/run2.sh <D0s|D1v2> <b|h> <pr>` (clona la copia congelada, añade el ticket y corre y corrige), más `host.mjs`, `cost.py`, `grade2.sh` y `shim.py` de v1. Los resultados crudos no se suben.
