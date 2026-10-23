@@ -4,7 +4,9 @@
 # main model, and measure cost and latency.
 #
 # Usage: docs/spikes/0.2-agent-hook.sh <empty-work-dir>
-# Costs money (claude -p with haiku in the session, opus in the hook). Cap: --max-budget-usd 0.50.
+# Costs money (claude -p with haiku in the session, opus in the hook). Cap: --max-budget-usd 0.30,
+# the acceptance limit; total_cost_usd includes the hook, so a run at or above $0.30 fails.
+# Exit status: claude's own status if it failed, 3 if the result is missing, 4 if over budget.
 # Never point it at a real repo: it creates a throwaway project inside <work-dir>.
 set -euo pipefail
 
@@ -64,27 +66,42 @@ PROMPT='Write a short plan (3-6 lines) to the file PLAN.md in the current direct
 
 # --- run ----------------------------------------------------------------------------------
 START=$(date +%s.%N)
+CLAUDE_STATUS=0
 (
   cd "$PROJ"
   env -u CLAUDECODE claude -p --model haiku \
     --setting-sources project \
     --permission-mode acceptEdits \
-    --max-budget-usd 0.50 \
+    --max-budget-usd 0.30 \
     --output-format stream-json --verbose \
     --debug-file "$WORK/debug.log" \
     "$PROMPT" > "$WORK/stream.jsonl" 2> "$WORK/stderr.log"
-) || echo "claude exited with $?" >&2
+) || CLAUDE_STATUS=$?
+if [[ $CLAUDE_STATUS -ne 0 ]]; then echo "claude exited with $CLAUDE_STATUS" >&2; fi
 END=$(date +%s.%N)
 
 # --- report -------------------------------------------------------------------------------
 echo "== wall time (s): $(awk -v s="$START" -v e="$END" 'BEGIN{printf "%.1f", e-s}')"
 echo "== result"
-jq -c 'select(.type=="result") | {subtype, is_error, num_turns, duration_ms, total_cost_usd, result, modelUsage: (.modelUsage | with_entries(.value |= {costUSD, inputTokens, outputTokens, cacheReadInputTokens, cacheCreationInputTokens}))}' "$WORK/stream.jsonl"
+jq -c 'select(.type=="result") | {subtype, is_error, num_turns, duration_ms, total_cost_usd, result, modelUsage: ((.modelUsage // {}) | with_entries(.value |= {costUSD, inputTokens, outputTokens, cacheReadInputTokens, cacheCreationInputTokens}))}' "$WORK/stream.jsonl" || true
 echo "== tool results the main model saw for Write"
-jq -c 'select(.type=="user") | .message.content[]? | select(.type=="tool_result") | {tool_use_id, is_error, content}' "$WORK/stream.jsonl"
+jq -c 'select(.type=="user") | .message.content[]? | select(.type=="tool_result") | {tool_use_id, is_error, content}' "$WORK/stream.jsonl" || true
 echo "== Write calls (content)"
-jq -c 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use" and .name=="Write") | {id, file: .input.file_path, content: .input.content}' "$WORK/stream.jsonl"
+jq -c 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use" and .name=="Write") | {id, file: .input.file_path, content: .input.content}' "$WORK/stream.jsonl" || true
 echo "== hook lines from debug log"
-grep -E 'Hooks: (Starting agent query|Got structured output|Agent hook)|Slow PreToolUse|tool_dispatch_(start|end) tool=' "$WORK/debug.log" | cut -c1-400 || true
+grep -E 'Hooks: (Starting agent query|Got structured output|Agent hook)|Slow PreToolUse|tool_dispatch_(start|end) tool=' "$WORK/debug.log" 2>/dev/null | cut -c1-400 || true
 echo "== PLAN.md on disk"
 cat "$PROJ/PLAN.md" 2>/dev/null || echo "(missing)"
+
+# --- verdict on cost and completeness ---------------------------------------------------------
+COST="$(jq -r 'select(.type=="result") | .total_cost_usd' "$WORK/stream.jsonl" 2>/dev/null | tail -n1 || true)"
+if [[ $CLAUDE_STATUS -ne 0 ]]; then
+  echo "== INCOMPLETE: claude exited with $CLAUDE_STATUS" >&2; exit "$CLAUDE_STATUS"
+fi
+if [[ -z "$COST" || "$COST" == "null" ]]; then
+  echo "== INCOMPLETE: no result line in stream.jsonl" >&2; exit 3
+fi
+if awk -v c="$COST" 'BEGIN{exit !(c >= 0.30)}'; then
+  echo "== FAIL: total_cost_usd $COST >= 0.30" >&2; exit 4
+fi
+echo "== OK: total_cost_usd $COST < 0.30"
