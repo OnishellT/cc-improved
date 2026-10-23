@@ -196,7 +196,7 @@ test("the full task flow, event by event, through the hooks.json commands", asyn
   const stop = (message: string, sessionId = SESSION) => send("Stop", "stop", { session_id: sessionId, last_assistant_message: message, stop_hook_active: false, background_tasks: [] });
   const review = await stop("The implementer finished.");
   assert.equal(review?.decision, "block");
-  assert.match(String(review?.reason), /needs a review before this task can finish \(risk: [^)]*review\.paths/);
+  assert.match(String(review?.reason), /needs a review before this task can finish \(risk high: [^)]*review\.paths/);
   assert.match(String(review?.reason), /`cc-improved:reviewer-sonnet` agent in the foreground/);
 
   // 10. A Stop of another session open on the same project is ignored (task.json belongs to SESSION).

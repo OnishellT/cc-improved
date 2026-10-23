@@ -16,7 +16,8 @@ import { missingNames } from "../contract.ts";
 import { buildPlanBrief, evidenceFor, parsePlanVerdict, readMcpText, siblings, type PlanCheckStatus } from "../evidence.ts";
 import { manifestPath, pluginDataDir, sessionStatePath, type Env } from "../paths.ts";
 import { parsePlan } from "../plan.ts";
-import type { Decision, Manifest, Plan, PreToolUseOutput, SubagentStopInput, Task } from "../types.ts";
+import { highRiskReasons } from "../risk.ts";
+import type { Decision, Manifest, Plan, ReviewPolicy, PreToolUseOutput, SubagentStopInput, Task } from "../types.ts";
 import type { HookContext, HookModule } from "./dispatch.ts";
 import { strongAgentChoice } from "./gate.ts";
 
@@ -180,10 +181,26 @@ export async function recordPlanCheckVerdict(input: SubagentStopInput, ctx: Hook
   return verdict;
 }
 
-function planCheckRequest(brief: string, env: Env): string {
+// Plan size above which the check is worth its cost, when no risky path is touched (`review.planFiles/...` override).
+const PLAN_FILES = 5;
+const PLAN_INTERFACE = 3;
+const PLAN_DECISIONS = 1;
+
+/**
+ * Whether the plan check is requested: `strong` when the plan touches risk triggers (or `review.always`), `cheap` when
+ * it is just big, `undefined` when a small plan does not need it.
+ */
+export function planCheckLevel(plan: Plan, rule: ReviewPolicy | undefined): "strong" | "cheap" | undefined {
+  if (rule?.always || highRiskReasons(plan.files, rule).length) return "strong";
+  const over = (n: number, limit: number | undefined, fallback: number) => n > (typeof limit === "number" && Number.isFinite(limit) && limit >= 0 ? limit : fallback);
+  const big = over(plan.files.length, rule?.planFiles, PLAN_FILES) || over(plan.interface.length, rule?.planInterface, PLAN_INTERFACE) || over(plan.decisions.length, rule?.planDecisions, PLAN_DECISIONS);
+  return big ? "cheap" : undefined;
+}
+
+function planCheckRequest(brief: string, env: Env, strong: boolean): string {
   // Subagents run in the background by default (spike 0.5): without the verdict in hand, the orchestrator would call
   // ExitPlanMode again before the check ends and the check would be wasted.
-  const { agent, model } = strongAgentChoice("plan-check", env);
+  const { agent, model } = strongAgentChoice("plan-check", env, { strong });
   const call = `subagent_type "${agent}"${model ? `, model "${model}"` : ""}, run_in_background: false`;
   return [
     `${header} One strong-model plan check is required before the user reviews it (it runs once per task).`,
@@ -234,8 +251,10 @@ export default {
     const state = isNew ? await ctx.session.save({ planChecks: 0 }) : await ctx.session.load();
     if (manifest.review?.plan === false) return;
     if (state.planChecks < MAX_PLAN_CHECKS) {
+      const level = planCheckLevel(plan, manifest.review);
+      if (!level) return;
       await ctx.session.save({ planChecks: state.planChecks + 1 });
-      return deny(planCheckRequest(buildPlanBrief(task, plan, evidence, await siblings(ctx.root, plan)), ctx.env));
+      return deny(planCheckRequest(buildPlanBrief(task, plan, evidence, await siblings(ctx.root, plan)), ctx.env, level === "strong"));
     }
     const verdict = await readPlanCheckVerdict(input.session_id, ctx.env);
     return { systemMessage: verdictNotice(verdict?.taskId === task.id ? verdict : undefined), hookSpecificOutput: { hookEventName: "PreToolUse" } };

@@ -44,6 +44,18 @@ Registro corto de decisiones de proceso del repo. Una entrada por decisión, con
 - **Decisión:** si los dos están activos, `always` gana: se revisa cada tarea. Es la opción que gasta más pero no omite una revisión pedida de forma explícita.
 - **Consecuencia:** `never: true` solo tiene efecto sin `always`. El comentario del campo `always` en `lib/types.ts` lo indica.
 
+## D-008: recorte de costes A: revisión por nivel de riesgo, variante `-sonnet` por defecto y chequeo del plan solo si compensa
+
+- **Contexto:** la eval (`docs/EVAL.md`) mostró que el gate pidió revisión en 10 de 10 tareas y que el modelo fuerte se usó en todas, sin que ese gasto se tradujera en tests.
+- **Decisión:**
+  - `assessRisk` devuelve `level` (`none|low|high`) con razones. `none`: sin revisión. `low`: revisión con `reviewer-sonnet`. `high`: revisión con el modelo fuerte (`reviewer`).
+  - `high`: dependencias, migraciones, `review.paths`, zonas sensibles, o un diff de más de 600 líneas o 15 archivos. `low`: más de 200 líneas o 6 archivos, sin plan, o decisiones nuevas del usuario. Todo lo demás es `none`. Ante la duda se sube de nivel, nunca se baja. Los umbrales son configurables en `review` (`maxLines`, `maxFiles`, `highLines`, `highFiles`); `high` nunca queda por debajo de `low`.
+  - `review.always` sigue ganando a `review.never` (D-007): nivel `high`. `review.never` da `none`.
+  - `plan-check` y `reviewer` usan `-sonnet` salvo nivel `high` o `review.always`; entonces usan el modelo fuerte configurado (`strong_model`). Si `strong_model` es `sonnet`, todo va en sonnet. El `fixer` no cambia: solo corre tras fallos y sigue el modelo configurado. `strong_model` por defecto (`opus` en `plugin.json`) pasa a significar "a qué escalar", no "qué usar siempre".
+  - El chequeo del plan solo se pide si el plan tiene más de 5 archivos, más de 3 entradas en `interface` o más de 1 decisión (`review.planFiles`, `planInterface`, `planDecisions`), con variante `-sonnet`; o si sus `files` tocan dependencias, migraciones, `review.paths` o zonas sensibles, o hay `review.always`, con el modelo fuerte. `review.plan: false` lo sigue desactivando.
+- **Porqué esos umbrales:** los de tamaño de `none`/`low` son los que ya había (200 líneas, 6 archivos), así que un cambio pequeño sin triggers sigue sin revisión; lo nuevo es que el tramo medio ya no paga el modelo fuerte. Los de `high` (3 veces el tamaño de `low` en líneas, algo más de 2 veces en archivos) reservan el modelo fuerte a diffs que un revisor barato difícilmente cubre. Los del plan siguen el tamaño de los planes de la eval (2 a 4 archivos, 1 interfaz, 0 o 1 decisiones), que no necesitaban chequeo fuerte.
+- **Consecuencia:** menos gasto en el modelo fuerte sin quitar revisión donde hay riesgo real. Los defaults son conservadores y se ajustan por proyecto en `review`. Pendiente fuera de este cambio: la descripción de `strong_model` en `.claude-plugin/plugin.json` sigue diciendo que es el modelo de los tres roles.
+
 ## D-010: `/setup` lo ejecuta una sola vez el modelo grande (opus)
 
 - **Contexto:** el setup produce los artefactos que reutilizan todas las tareas (CLAUDE.md, herramientas de verificación, skills del proyecto, manifest); conviene que lo haga el modelo grande y una sola vez. `${user_config.*}` no se sustituye en `model:` (spike 0.4), así que el modelo no puede venir de la configuración.

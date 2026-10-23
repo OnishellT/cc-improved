@@ -2,10 +2,13 @@ import { execFile } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { WORKFLOW_DIR } from "./paths.ts";
-import type { Manifest, Task } from "./types.ts";
+import type { Manifest, ReviewPolicy, RiskLevel, Task } from "./types.ts";
 
+// Defaults of the size thresholds; `review.maxLines/maxFiles/highLines/highFiles` override them.
 const MAX_LINES = 200;
 const MAX_FILES = 6;
+const HIGH_LINES = 600;
+const HIGH_FILES = 15;
 const GIT_TIMEOUT_MS = 30_000;
 const GIT_MAX_BUFFER = 16 * 1024 * 1024;
 // Same patterns as lib/triggers.ts (#12); inlined so this module has no dependency on it yet.
@@ -30,12 +33,33 @@ const git = (root: string, args: string[]): Promise<string> =>
     execFile("git", args, { cwd: root, timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER }, (err, stdout) => resolve(err ? "" : stdout));
   });
 
-/** Whether the diff needs the paid strong-model review. Cheap: git and regexes, no LLM. */
-export async function assessRisk(root: string, task: Task | undefined, manifest: Manifest): Promise<{ review: boolean; reasons: string[] }> {
+const threshold = (value: number | undefined, fallback: number) => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback);
+
+/** Reasons that make `files` high risk whatever their size: dependencies, migrations, `review.paths`, sensitive zones. */
+export function highRiskReasons(files: string[], rule: ReviewPolicy | undefined): string[] {
+  const reasons: string[] = [];
+  const pick = (test: (f: string) => boolean) => files.filter(test).slice(0, 3).join(", ");
+  const deps = pick((f) => MANIFEST.test(f) || DEPENDENCIES.test(f));
+  if (deps) reasons.push(`dependencias (${deps})`);
+  const migrations = pick((f) => MIGRATION.test(f));
+  if (migrations) reasons.push(`migración (${migrations})`);
+  const matchers = (rule?.paths ?? []).map(pathMatcher);
+  const matched = pick((f) => matchers.some((m) => m(f)));
+  if (matched) reasons.push(`review.paths (${matched})`);
+  const sensitive = pick((f) => SENSITIVE.test(f));
+  if (sensitive) reasons.push(`zona sensible (${sensitive})`);
+  return reasons;
+}
+
+/**
+ * How much review the diff needs. `none`: skip it. `low`: a cheap-model review. `high`: the strong-model review.
+ * Cheap: git and regexes, no LLM. Doubt goes up a level, never down.
+ */
+export async function assessRisk(root: string, task: Task | undefined, manifest: Manifest): Promise<{ review: boolean; level: RiskLevel; reasons: string[] }> {
   const rule = manifest.review;
   // `always` wins over `never` (see ReviewPolicy in types.ts).
-  if (rule?.always) return { review: true, reasons: ["review.always"] };
-  if (rule?.never) return { review: false, reasons: ["review.never"] };
+  if (rule?.always) return { review: true, level: "high", reasons: ["review.always"] };
+  if (rule?.never) return { review: false, level: "none", reasons: ["review.never"] };
 
   const lines = new Map<string, number>();
   for (const row of (await git(root, ["diff", "HEAD", "--numstat"])).split("\n")) {
@@ -51,20 +75,18 @@ export async function assessRisk(root: string, task: Task | undefined, manifest:
   const total = [...lines.values()].reduce((a, b) => a + b, 0);
 
   const reasons: string[] = [];
-  if (total > MAX_LINES) reasons.push(`${total} líneas cambiadas`);
-  if (files.length > MAX_FILES) reasons.push(`${files.length} archivos`);
-  const pick = (test: (f: string) => boolean) => files.filter(test).slice(0, 3).join(", ");
-  const deps = pick((f) => MANIFEST.test(f) || DEPENDENCIES.test(f));
-  if (deps) reasons.push(`dependencias (${deps})`);
-  const migrations = pick((f) => MIGRATION.test(f));
-  if (migrations) reasons.push(`migración (${migrations})`);
-  const matchers = (rule?.paths ?? []).map(pathMatcher);
-  const matched = pick((f) => matchers.some((m) => m(f)));
-  if (matched) reasons.push(`review.paths (${matched})`);
-  const sensitive = pick((f) => SENSITIVE.test(f));
-  if (sensitive) reasons.push(`zona sensible (${sensitive})`);
-  if (!task?.plan) reasons.push("sin plan");
+  let level: RiskLevel = "none";
+  const raise = (to: RiskLevel, reason: string) => {
+    reasons.push(reason);
+    if (to === "high" || level === "none") level = to;
+  };
+  const [maxLines, maxFiles] = [threshold(rule?.maxLines, MAX_LINES), threshold(rule?.maxFiles, MAX_FILES)];
+  const [highLines, highFiles] = [Math.max(maxLines, threshold(rule?.highLines, HIGH_LINES)), Math.max(maxFiles, threshold(rule?.highFiles, HIGH_FILES))];
+  if (total > maxLines) raise(total > highLines ? "high" : "low", `${total} líneas cambiadas`);
+  if (files.length > maxFiles) raise(files.length > highFiles ? "high" : "low", `${files.length} archivos`);
+  for (const reason of highRiskReasons(files, rule)) raise("high", reason);
+  if (!task?.plan) raise("low", "sin plan");
   // A decision with an `answer` was put to the user; one with only a `source` was already settled in the repo.
-  else if (task.plan.decisions.some((d) => d.answer !== undefined)) reasons.push("decisiones nuevas del usuario");
-  return { review: reasons.length > 0, reasons };
+  else if (task.plan.decisions.some((d) => d.answer !== undefined)) raise("low", "decisiones nuevas del usuario");
+  return { review: level !== "none", level, reasons };
 }

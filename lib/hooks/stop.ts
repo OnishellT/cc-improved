@@ -74,8 +74,8 @@ async function gate(input: StopInput, ctx: HookContext, manifest: Manifest): Pro
       return blockWith(
         "review",
         [
-          `The diff needs a review before this task can finish (risk: ${risk.reasons.join("; ")}).`,
-          `Launch the ${strongAgent("reviewer", ctx.env)} agent in the foreground (run_in_background: false) with the review brief: the plan (files, interface, seams, decisions), the full diff from \`git diff HEAD\` and every new file in full.`,
+          `The diff needs a review before this task can finish (risk ${risk.level}: ${risk.reasons.join("; ")}).`,
+          `Launch the ${strongAgent("reviewer", ctx.env, { strong: risk.level === "high" })} agent in the foreground (run_in_background: false) with the review brief: the plan (files, interface, seams, decisions), the full diff from \`git diff HEAD\` and every new file in full.`,
           "Then fix each blocking finding it lists after `VERDICT: FIX` and finish. There is one review round: your fixes are checked by verify, not by a second review.",
         ].join("\n"),
       );

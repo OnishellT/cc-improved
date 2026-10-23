@@ -8,6 +8,9 @@
 /** Where `/setup` stands for this project. `declined`: the user opted out; hooks stay quiet. */
 export type SetupStatus = "pending" | "running" | "done" | "declined";
 
+/** How much review a diff needs: none (skip), low (cheap model), high (strong model). */
+export type RiskLevel = "none" | "low" | "high";
+
 /** When the strong-model diff review runs. Default: only when `risk.ts` finds the diff risky. */
 export interface ReviewPolicy {
   /** Repo-relative paths or prefixes (ending in `/`) whose changes always count as risky. */
@@ -18,6 +21,16 @@ export interface ReviewPolicy {
   never?: boolean;
   /** One strong-model check of the plan before the user approves it. Default: true. */
   plan?: boolean;
+  /** Diff size above which a (cheap-model) review is requested. Defaults: 200 lines, 6 files. */
+  maxLines?: number;
+  maxFiles?: number;
+  /** Diff size above which the strong-model review is requested. Defaults: 600 lines, 15 files. */
+  highLines?: number;
+  highFiles?: number;
+  /** A plan with more files / interface entries / decisions than this gets the plan check. Defaults: 5, 3, 1. Risky paths always do. */
+  planFiles?: number;
+  planInterface?: number;
+  planDecisions?: number;
 }
 
 /** A read-only ticket or docs source enabled by `/setup`. Its MCP server lives in the project's `.mcp.json`. */

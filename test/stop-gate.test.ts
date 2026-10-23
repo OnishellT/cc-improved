@@ -224,8 +224,14 @@ test("risky diff: Stop asks for the reviewer once; its verdict is stored; no sec
 });
 
 test("a reviewer variant with a full model id is launched with that model", () => {
-  assert.equal(strongAgent("reviewer", { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "claude-opus-5-5" }), '`cc-improved:reviewer` with `model: "claude-opus-5-5"`');
-  assert.equal(strongAgent("reviewer", {}), "`cc-improved:reviewer`");
+  assert.equal(strongAgent("fixer", { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "claude-opus-5-5" }), '`cc-improved:fixer` with `model: "claude-opus-5-5"`');
+  assert.equal(strongAgent("reviewer", { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "claude-opus-5-5" }, { strong: true }), '`cc-improved:reviewer` with `model: "claude-opus-5-5"`');
+  assert.equal(strongAgent("reviewer", {}, { strong: true }), "`cc-improved:reviewer`");
+  assert.equal(strongAgent("reviewer", { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "opus" }), "`cc-improved:reviewer-sonnet`", "cheap by default, whatever the config");
+  assert.equal(strongAgent("reviewer", {}), "`cc-improved:reviewer-sonnet`");
+  assert.equal(strongAgent("plan-check", { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "opus" }), "`cc-improved:plan-check-sonnet`");
+  assert.equal(strongAgent("reviewer", { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "sonnet" }, { strong: true }), "`cc-improved:reviewer-sonnet`");
+  assert.equal(strongAgent("fixer", {}), "`cc-improved:fixer`", "the fixer keeps the configured model");
   assert.equal(strongAgent("plan-check", { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "Sonnet" }), "`cc-improved:plan-check-sonnet`");
 });
 
@@ -241,6 +247,25 @@ test("low-risk diff: no review is paid, the summary says so, and an unchanged tr
 
   assert.equal(await run(l, await stop()), undefined, "same working copy: verify is not run again and nothing is printed");
   assert.equal(await runCount(l), 1);
+});
+
+test("medium diff asks for the cheap reviewer; a risk trigger asks for the strong one", async () => {
+  const opus = { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "opus" };
+  const medium = await lab({}, task, opus);
+  await writeFile(path.join(medium.root, "src", "math.js"), `${Array.from({ length: 250 }, (_, i) => `export const v${i} = ${i};`).join("\n")}\nexport const sub = (a, b) => a - b;\n`);
+  await pass(medium);
+  const low = await run(medium, await stop());
+  assert.equal(low?.decision, "block");
+  assert.match(low!.reason!, /risk low: .*líneas cambiadas/);
+  assert.match(low!.reason!, /Launch the `cc-improved:reviewer-sonnet` agent/);
+
+  const risky = await lab({}, task, opus);
+  await implement(risky);
+  await writeFile(path.join(risky.root, "package.json"), "{}\n");
+  await pass(risky);
+  const high = await run(risky, await stop());
+  assert.match(high!.reason!, /risk high: .*dependencias/);
+  assert.match(high!.reason!, /Launch the `cc-improved:reviewer` agent/);
 });
 
 test("orchestrator contract check runs before verify", async () => {
