@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OnishellT/cc-improved/lib/plan.schema.json",
+  "title": "wf-plan",
+  "description": "The JSON inside the ```wf-plan fenced block of a plan-mode file. Mirrors the Plan type in lib/types.ts.",
+  "$comment": "errorMessage (ajv-errors convention) is the text a validator reports when that node fails (a missing required property fails the parent object). It is written for the model that wrote the block, so it says what to change. Only this subset is used: type, required, properties, additionalProperties, items, minItems, minLength.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "spec", "files", "interface", "seams", "decisions"],
+  "errorMessage": "The wf-plan block must be one JSON object with title, spec, files, interface, seams and decisions (ticket is optional). Fix the block in the plan file and call ExitPlanMode again.",
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "errorMessage": "title must be a non-empty string: one line naming the task."
+    },
+    "ticket": {
+      "type": "string",
+      "minLength": 1,
+      "errorMessage": "ticket must be the ticket key as a string, e.g. \"PAY-142\". Omit the field when the task has no ticket."
+    },
+    "spec": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "errorMessage": "spec must be an array of repo-relative spec file paths named in the request; use [] when there are none."
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "errorMessage": "files must list every repo-relative file the task will create or change (end an entry with / to cover a directory). Edits outside this list need the user's permission."
+    },
+    "interface": {
+      "type": "array",
+      "minItems": 1,
+      "errorMessage": "interface must list, per file, the exported names the implementation will expose, e.g. [{\"file\": \"src/pay.ts\", \"exports\": [\"chargeCard\"], \"source\": \"PAY-142\"}]. Pin them now: the tests and the reviewer check these names.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file", "exports"],
+        "errorMessage": "Each interface entry needs file (repo-relative path) and exports (non-empty array of names); signatures and source are optional strings.",
+        "properties": {
+          "file": {
+            "type": "string",
+            "minLength": 1,
+            "errorMessage": "interface[].file must be a repo-relative file path."
+          },
+          "exports": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 },
+            "errorMessage": "interface[].exports must be a non-empty array of the exact names the file will export."
+          },
+          "signatures": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "errorMessage": "interface[].signatures must be an array of strings, one signature each, in the project's language."
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "errorMessage": "interface[].source must say where the names come from: the ticket key, a spec path or an existing file."
+          }
+        }
+      }
+    },
+    "seams": {
+      "type": "array",
+      "minItems": 1,
+      "errorMessage": "seams must list where the tests attach, e.g. [{\"name\": \"charge rejects expired cards\", \"testFile\": \"test/pay.test.ts\", \"catches\": \"...\", \"misses\": \"...\"}].",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "testFile", "catches"],
+        "errorMessage": "Each seam needs name, testFile (repo-relative) and catches; misses is optional.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "errorMessage": "seams[].name must be a short string naming the behavior under test."
+          },
+          "testFile": {
+            "type": "string",
+            "minLength": 1,
+            "errorMessage": "seams[].testFile must be the repo-relative path of the test file."
+          },
+          "catches": {
+            "type": "string",
+            "minLength": 1,
+            "errorMessage": "seams[].catches must say what this test catches."
+          },
+          "misses": {
+            "type": "string",
+            "minLength": 1,
+            "errorMessage": "seams[].misses must say what this test leaves uncovered; omit it if nothing relevant."
+          }
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "errorMessage": "decisions must be an array (use [] when the plan makes no design choice).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["question", "options", "source"],
+        "errorMessage": "Each decision needs question, options and source; answer is optional. A decision with no source is not settled yet: ask the user with AskUserQuestion, record the answer in answer, save an ADR in docs/adr/ and put its path in source.",
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "errorMessage": "decisions[].question must state the choice as a question."
+          },
+          "options": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "errorMessage": "decisions[].options must be an array of the options considered, as strings."
+          },
+          "answer": {
+            "type": "string",
+            "minLength": 1,
+            "errorMessage": "decisions[].answer must be the chosen option as a string."
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "errorMessage": "decisions[].source is missing: ask the user this question with AskUserQuestion, record the answer in answer, save an ADR in docs/adr/ and put its path in source. If a spec, the ticket or an existing file already settles it, cite that instead."
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "session_id": "185b8104-065e-43cc-a5b6-8b821bdffbb9",
+  "transcript_path": "/home/dev/.claude/projects/-home-dev--cache-workstation-tmp-claude-1000--home-dev-projects-pi-improved-60c7d9d9-08e1-4624-88c4-90f0c99e5ab2-scratchpad-cc-lab/185b8104-065e-43cc-a5b6-8b821bdffbb9.jsonl",
+  "cwd": "/home/dev/.cache/workstation-tmp/claude-1000/-home-dev-projects-pi-improved/60c7d9d9-08e1-4624-88c4-90f0c99e5ab2/scratchpad/cc-lab",
+  "prompt_id": "d31974d6-9831-48f8-8d97-c18fe8776f85",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo gate-ok",
+    "description": "Run gate check echo"
+  },
+  "tool_use_id": "toolu_012RexQ67Jb3w7mXHcKbu3mc"
+}
