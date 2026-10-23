@@ -1,0 +1,26 @@
+schema_version: "1.1"
+name: verify-sin-manifiesto
+description: Sin .claude/workflow.json, la skill verify no inventa comandos y remite a /setup.
+tags: [skill, verify]
+runs: 1
+execution:
+  prompt: |
+    Ejecuta la verificación de este proyecto con la skill verify del plugin cc-improved.
+  model: claude-haiku-5-5
+  max_turns: 6
+  timeout_seconds: 120
+  allowed_tools: [Skill, Read, Glob]
+graders:
+  - name: skill-verify
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?verify"'
+  - name: remite-a-setup
+    type: regex
+    pattern: "/setup"
+  - name: no-inventa-comandos
+    type: tool_used
+    tool: Bash
+    min: 0
+    max: 0
+    arm: both

@@ -1,3 +1,4 @@
 node_modules/
 .claude/workflow/
 *.log
+evals/results/
