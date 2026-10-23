@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { dispatch } from "../lib/hooks/dispatch.ts";
-import mod, { setupNote, setupState, taskSummary } from "../lib/hooks/session-start.ts";
+import mod, { MODES_NOTE, setupNote, setupState, taskSummary } from "../lib/hooks/session-start.ts";
 import { manifestPath, taskPath } from "../lib/paths.ts";
 import type { ContextOutput, Task } from "../lib/types.ts";
 
@@ -46,8 +46,10 @@ test("setupState reads the manifest: missing, each status, and unreadable for ba
   assert.equal(await setupState((await sandbox({ manifest: "null" })).root), "unreadable");
 });
 
-test("setupNote: quiet when done or declined; otherwise offers /setup without running it", () => {
-  assert.equal(setupNote("done"), undefined);
+test("setupNote: one line with both modes when done, quiet when declined; otherwise offers /setup without running it", () => {
+  assert.equal(setupNote("done"), MODES_NOTE);
+  assert.ok(!MODES_NOTE.includes("\n") && MODES_NOTE.length < 200);
+  assert.match(MODES_NOTE, /\/setup.*\/task/);
   assert.equal(setupNote("declined"), undefined);
   for (const s of ["missing", "pending", "running", "unreadable"] as const) assert.match(setupNote(s) ?? "", /\/setup/);
   assert.match(setupNote("missing") ?? "", /\.claude\/workflow\.json/);
@@ -65,8 +67,9 @@ test("real fixture, setup pending or running: offers /setup", async () => {
   assert.match((await context((await sandbox({ manifest: manifest("running") })).env)) ?? "", /not finished.*\/setup/);
 });
 
-test("real fixture, setup done or declined and no task: no output", async () => {
-  for (const s of ["done", "declined"]) assert.equal(await dispatch(RAW, { env: (await sandbox({ manifest: manifest(s) })).env, registry }), "");
+test("real fixture, setup done and no task: only the modes line; declined: no output", async () => {
+  assert.equal(await context((await sandbox({ manifest: manifest("done") })).env), MODES_NOTE);
+  assert.equal(await dispatch(RAW, { env: (await sandbox({ manifest: manifest("declined") })).env, registry }), "");
 });
 
 test("an open task is summarized; a closed one is not", async () => {
@@ -74,11 +77,12 @@ test("an open task is summarized; a closed one is not", async () => {
   const implementing = await context((await sandbox({ manifest: manifest("done"), task: { ticket: "LAB-142", plan } })).env);
   assert.equal(
     implementing,
-    'Open workflow task: "Export invoices" (LAB-142), status implementing. Plan files: src/csv.ts, test/. Change only the plan files; verification runs automatically when you stop. The user closes the task with /done.',
+    MODES_NOTE + "\n" +
+      'Open workflow task: "Export invoices" (LAB-142), status implementing. Plan files: src/csv.ts, test/. Change only the plan files; verification runs automatically when you stop. The user closes the task with /done.',
   );
   const planning = await context((await sandbox({ manifest: manifest("done"), task: { status: "planning", planFilePath: "/tmp/plan.md" } })).env);
   assert.match(planning ?? "", /status planning\. Plan: \/tmp\/plan\.md\. The plan is waiting for the user's approval\./);
-  assert.equal(await dispatch(RAW, { env: (await sandbox({ manifest: manifest("done"), task: { status: "done" } })).env, registry }), "");
+  assert.equal(await context((await sandbox({ manifest: manifest("done"), task: { status: "done" } })).env), MODES_NOTE);
   assert.equal(taskSummary(undefined), undefined);
 });
 
@@ -90,9 +94,9 @@ test("setup note and task summary together; declined keeps only the task", async
   assert.doesNotMatch(declined ?? "", /setup/);
 });
 
-test("a task owned by another session: no output at all", async () => {
+test("a task owned by another session: no task summary", async () => {
   const { env } = await sandbox({ task: { sessionId: "other-session" } });
-  assert.equal(await dispatch(RAW, { env, registry }), "");
+  assert.doesNotMatch((await context(env)) ?? "", /Open workflow task/);
   const own = await sandbox({ manifest: manifest("done"), task: { sessionId: SESSION } });
-  assert.match((await context(own.env)) ?? "", /^Open workflow task/);
+  assert.match((await context(own.env)) ?? "", /\nOpen workflow task/);
 });

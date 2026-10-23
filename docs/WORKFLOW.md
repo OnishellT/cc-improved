@@ -93,6 +93,26 @@ Fuera del plugin. Lo hace el pipeline del proyecto cuando la PR se aprueba.
 
 Fuera del plugin y a propósito. La última palabra sobre la funcionalidad la tiene una persona en el entorno desplegado. Las herramientas de verificación y sus evidencias existen para que esa comprobación sea corta y dirigida, no para sustituirla.
 
+## Dos modos de uso
+
+El flujo de arriba es el completo. No hace falta recorrerlo entero en cada tarea:
+
+- **Modo 1: solo `/setup`.** Etapa 1 una vez, con el modelo más fuerte, y después trabajar con el modelo barato usando `CLAUDE.md`, las skills del proyecto y las herramientas de verificación que dejó el setup. Sin `/task`, no hay gates ni revisión.
+- **Modo 2: `/task` con gates y revisión.** Etapas 2 a 7. Pensado para tareas de riesgo: el código bloquea por nombres, contrato y `verify`, y el modelo fuerte revisa cuando el diff lo pide.
+
+Evidencia (eval v2, `docs/EVAL.md`, **n=1 por celda y un solo repo**; diferencias pequeñas son ruido):
+
+| Brazo | Qué es | Tests ocultos (de 436) | Coste de ejecución (10 celdas) | Coste con el setup repartido |
+|---|---|---|---|---|
+| D0 | modelo barato, sin plugin ni setup | 322 | $0.26 | $0.26 |
+| D0s | modelo barato, sin plugin, con `/setup` | 343 | $0.26 | $0.75 |
+| D1 | plugin completo, sin setup | 337 | $2.41 | $2.41 |
+| D1v2 | plugin completo, con `/setup` | 333 | $2.12 | $2.61 |
+
+Cómo leerlo: **n=1 por celda y un solo repositorio** (`thereelcapital`, 5 tareas, variantes ciega y con pista), así que diferencias de unos pocos tests o de unos centavos están dentro del ruido. Lo medido es solo "tests ocultos por dólar"; no mide lo que aportan los gates, la revisión o los bloqueos. El coste con setup reparte lo que costaron los 7 setups ($4.94 en total) entre 10 tareas. Detalle en [`docs/EVAL.md`](docs/EVAL.md) (eval v2, issue #73).
+
+Lectura honesta: en tests ocultos los cuatro brazos quedan en un rango parecido (322 a 343 de 436), y el flujo completo cuesta unas 8 veces más en ejecución que D0s. La eval no mide lo que el flujo aporta además de los tests (bloqueos, revisión), así que no demuestra que el modo 2 sobre; tampoco que el modo 1 baste para tareas de riesgo. Tras un setup `done`, SessionStart recuerda ambos modos en una línea.
+
 ## Cómo funciona por dentro
 
 **Estado.** `.claude/workflow.json` es el estado del proyecto (versionado). `.claude/workflow/task.json` es la tarea activa (local, ignorada por git) con `status` (`planning` | `implementing` | `done`), `plan` y `sessionId`. El estado de gates va por `session_id` en `${CLAUDE_PLUGIN_DATA}/sessions/`; los hooks disparan en todas las sesiones del proyecto e ignoran el estado ajeno.

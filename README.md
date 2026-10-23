@@ -42,6 +42,26 @@ Otros comandos: `/verify` (corre a mano los comandos de `verify`), `/wf-doctor` 
 
 El detalle de las 10 etapas del flujo y de qué cubre cada una está en [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
 
+## Dos modos de uso
+
+El plugin se puede usar de dos maneras. Elegir una no impide la otra en el mismo repo.
+
+1. **Solo `/setup`, y trabajar con el modelo barato.** Corres `/setup` una vez (con el mejor modelo, opus) y después trabajas con el modelo barato apoyándote en lo que dejó: `CLAUDE.md`, las skills del proyecto y las herramientas de verificación. No usas `/task`, así que no hay plan mode, ni gates, ni revisión.
+2. **`/task` con gates y revisión.** El flujo completo: plan verificado, implementación con contexto recortado, contrato, `verify` y revisión del modelo fuerte si el diff es arriesgado. Es lo que tiene sentido para tareas de riesgo, donde pagar el sobrecoste compra bloqueos y una segunda mirada.
+
+En la eval, el modelo barato con `/setup` (D0s) sacó 343 tests ocultos por $0.75 con el setup repartido, y el flujo completo con setup (D1v2) sacó 333 por $2.61:
+
+| Brazo | Qué es | Tests ocultos (de 436) | Coste de ejecución (10 celdas) | Coste con el setup repartido |
+|---|---|---|---|---|
+| D0 | modelo barato, sin plugin ni setup | 322 | $0.26 | $0.26 |
+| D0s | modelo barato, sin plugin, con `/setup` | 343 | $0.26 | $0.75 |
+| D1 | plugin completo, sin setup | 337 | $2.41 | $2.41 |
+| D1v2 | plugin completo, con `/setup` | 333 | $2.12 | $2.61 |
+
+Cómo leerlo: **n=1 por celda y un solo repositorio** (`thereelcapital`, 5 tareas, variantes ciega y con pista), así que diferencias de unos pocos tests o de unos centavos están dentro del ruido. Lo medido es solo "tests ocultos por dólar"; no mide lo que aportan los gates, la revisión o los bloqueos. El coste con setup reparte lo que costaron los 7 setups ($4.94 en total) entre 10 tareas. Detalle en [`docs/EVAL.md`](docs/EVAL.md) (eval v2, issue #73).
+
+Con estos datos **no se puede afirmar** que el flujo completo mejore la calidad, ni que `/setup` por sí solo la mejore: la única mejora clara de D0s (con pista, 183 frente a 162) viene casi toda de un ticket. Lo que sí se vio es que el flujo completo costó unas 8 veces más en ejecución que D0s sin dar más tests. Hay que repetir con varias ejecuciones por celda y más repos antes de concluir algo más fino.
+
 ## Herramientas de verificación portables
 
 `/setup` diseña contigo pequeñas herramientas de verificación dentro del repo (por defecto `tools/verify/`): cada una hace una sola cosa, tiene `--help` y devuelve código de salida más una salida corta. Declaran su runtime: `python` (Python 3 solo con biblioteca estándar) o `nix` (script más `shell.nix` o `flake.nix` que fija sus dependencias). El plugin no trae ninguna propia. Se registran en `.claude/workflow.json` (`tools`) y se documentan en la sección **Tools** de `.claude/skills/verify-app/SKILL.md`, para que el implementer, el fixer y el planificador las usen.
