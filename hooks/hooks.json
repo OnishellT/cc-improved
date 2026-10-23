@@ -1,5 +1,6 @@
 {
   "description": "cc-improved: every event enters through bin/wf-hook.mjs, which dispatches to lib/hooks/ (see lib/hooks/README.md). Timeouts stay above the dispatcher budgets: 8 s for quick events, 570 s for the Stop/SubagentStop gates that run verify.",
+  "modules": ["../mod/register.tsx"],
   "hooks": {
     "SessionStart": [
       {
