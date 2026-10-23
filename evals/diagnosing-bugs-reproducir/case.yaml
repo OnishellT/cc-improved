@@ -1,0 +1,27 @@
+schema_version: "1.1"
+name: diagnosing-bugs-reproducir
+description: Con la skill diagnosing-bugs, el primer paso es reproducir el fallo antes de tocar código.
+tags: [skill, diagnosing-bugs]
+runs: 1
+execution:
+  prompt: |
+    A nightly job in my service fails with a timeout about one night in five. Load the diagnosing-bugs skill of the cc-improved plugin and tell me what your first step is. Do not change any file.
+  model: claude-haiku-5-5
+  max_turns: 6
+  timeout_seconds: 120
+  allowed_tools: [Skill, Read, Glob]
+graders:
+  - name: skill-diagnosing-bugs
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?diagnosing-bugs"'
+  - name: reproduce-primero
+    type: regex
+    pattern: "reproduc"
+    flags: i
+  - name: no-edita
+    type: tool_used
+    tool: Edit
+    min: 0
+    max: 0
+    arm: both

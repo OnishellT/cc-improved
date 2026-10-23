@@ -1,6 +1,6 @@
 {
   "name": "cc-improved",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "pi-improved para Claude Code: flujo gobernado por código con modelo barato y modelo fuerte donde paga.",
   "author": {
     "name": "OnishellT"
@@ -12,5 +12,8 @@
       "description": "Modelo de plan-check, reviewer y fixer: opus (por defecto), sonnet (usa las variantes -sonnet) u otro alias o id, que se pasa como model al lanzar el agente.",
       "default": "opus"
     }
-  }
+  },
+  "icon": "./.claude-plugin/icon.png",
+  "license": "MIT",
+  "repository": "https://github.com/OnishellT/cc-improved"
 }

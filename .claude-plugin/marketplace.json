@@ -7,7 +7,8 @@
     {
       "name": "cc-improved",
       "source": "./",
-      "description": "pi-improved para Claude Code."
+      "description": "pi-improved para Claude Code: flujo gobernado por código con modelo barato y modelo fuerte donde paga.",
+      "version": "0.1.0"
     }
   ],
   "description": "Marketplace de un solo plugin: cc-improved."
