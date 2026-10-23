@@ -76,7 +76,7 @@ test("real fixtures: a background subagent still running and a foreign agent typ
   assert.equal(await runCount(l), 0, "verify never ran");
 });
 
-test("implementer ladder: fix, then diagnose, then let out with FAILED; never more than 3 verify runs", async () => {
+test("implementer ladder: one fix block with the diagnosis, then let out with FAILED; never more than 2 verify runs", async () => {
   const l = await lab({}, task, { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "sonnet" });
   await implement(l);
   const input = await subagent("cc-improved:implementer");
@@ -85,23 +85,19 @@ test("implementer ladder: fix, then diagnose, then let out with FAILED; never mo
   assert.equal(first?.decision, "block");
   assert.match(first!.reason!, /verify FAILED/);
   assert.match(first!.reason!, /test -f ok/);
-  assert.doesNotMatch(first!.reason!, /Diagnose/);
+  assert.match(first!.reason!, /Diagnose before changing more code/);
+  assert.match(first!.reason!, /FAILED:/);
+  assert.match(first!.reason!, /cc-improved:fixer-sonnet/, "the fixer variant follows the strong_model config");
 
   // stop_hook_active is true on every continuation (spike 0.3): the count comes from the session state.
   const second = await run(l, input, { stop_hook_active: true });
-  assert.equal(second?.decision, "block");
-  assert.match(second!.reason!, /Diagnose before changing more code/);
-  assert.match(second!.reason!, /FAILED:/);
-  assert.match(second!.reason!, /cc-improved:fixer-sonnet/, "the fixer variant follows the strong_model config");
-
-  const third = await run(l, input, { stop_hook_active: true });
-  assert.equal(third?.decision, undefined, "the third failure lets the agent out");
-  assert.match(third!.systemMessage!, /FAILED/);
+  assert.equal(second?.decision, undefined, "the second failure lets the agent out");
+  assert.match(second!.systemMessage!, /FAILED/);
 
   assert.equal(await run(l, input, { stop_hook_active: true }), undefined, "a stop after the release is quiet");
-  assert.equal(await runCount(l), 3);
+  assert.equal(await runCount(l), 2);
   const s = await state(l);
-  assert.deepEqual(s.agents?.["impl-1"], { role: "implementer", contractBlocks: 0, failures: 3, policyBlocks: 0, outcome: "failed" });
+  assert.deepEqual(s.agents?.["impl-1"], { role: "implementer", contractBlocks: 0, failures: 2, policyBlocks: 0, outcome: "failed" });
 });
 
 test("counters are per agent_id: a second implementer starts its own ladder", async () => {
@@ -110,8 +106,9 @@ test("counters are per agent_id: a second implementer starts its own ladder", as
   await run(l, await subagent("cc-improved:implementer", "impl-1"));
   await run(l, await subagent("cc-improved:implementer", "impl-1"));
   const other = await run(l, await subagent("cc-improved:implementer", "impl-2"));
-  assert.doesNotMatch(other!.reason!, /Diagnose/);
+  assert.equal(other?.decision, "block", "impl-2 is not released by impl-1's failures");
   const s = await state(l);
+  assert.equal(s.agents?.["impl-1"]?.outcome, "failed");
   assert.equal(s.agents?.["impl-1"]?.failures, 2);
   assert.equal(s.agents?.["impl-2"]?.failures, 1);
 });
@@ -176,20 +173,20 @@ test("orchestrator Stop: implementer FAILED → escalate to the fixer; fixer FAI
   assert.equal(await run(l, await stop()), undefined, "the release message is not repeated");
 });
 
-test("orchestrator Stop alone: fix → diagnose → escalate → person, at most 3 verify blocks per prompt", async () => {
+test("orchestrator Stop alone: fix → escalate → person, at most 2 verify blocks per prompt", async () => {
   const l = await lab();
   await implement(l);
   const kinds: string[] = [];
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 4; i++) {
     const out = await run(l, await stop());
-    kinds.push(out?.decision === "block" ? (/Diagnose/.test(out.reason!) ? "diagnose" : /fixer/.test(out.reason!) ? "escalate" : "fix") : out?.systemMessage ? "person" : "quiet");
+    kinds.push(out?.decision === "block" ? (/fixer/.test(out.reason!) ? "escalate" : "fix") : out?.systemMessage ? "person" : "quiet");
   }
-  assert.deepEqual(kinds, ["fix", "diagnose", "escalate", "person", "quiet"]);
+  assert.deepEqual(kinds, ["fix", "escalate", "person", "quiet"]);
 
   // A new user prompt resets the per-prompt counters: the ladder starts again.
   const fresh = await run(l, await stop({ prompt_id: "another-prompt" }));
   assert.equal(fresh?.decision, "block");
-  assert.doesNotMatch(fresh!.reason!, /Diagnose|fixer/);
+  assert.doesNotMatch(fresh!.reason!, /fixer/);
 });
 
 test("risky diff: Stop asks for the reviewer once; its verdict is stored; no second paid round", async () => {

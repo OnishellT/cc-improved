@@ -7,7 +7,6 @@ import { assessRisk } from "../risk.ts";
 import type { AgentGateState, Manifest, SessionState, StopInput, StopOutput } from "../types.ts";
 import type { HookContext, HookModule } from "./dispatch.ts";
 import {
-  DIAGNOSE_AT,
   DIAGNOSE_METHOD,
   fingerprint,
   loadGateState,
@@ -22,7 +21,7 @@ import {
   verify,
 } from "./gate.ts";
 
-type Level = "fix" | "diagnose" | "escalate" | "person";
+type Level = "fix" | "escalate" | "person";
 
 const ran = (s: SessionState, r: string) => Object.values(s.agents ?? {}).filter((a: AgentGateState) => a.role === r);
 
@@ -108,21 +107,18 @@ async function verifyFailed(
   const fixerFailed = ran(s, "fixer").some((a) => a.outcome === "failed");
   const implementerFailed = ran(s, "implementer").some((a) => a.outcome === "failed");
 
-  // Order: fix → diagnose → stronger model (fixer) → the person. At most 3 verify blocks per prompt.
+  // Order: fix (with the diagnosis method) → stronger model (fixer) → the person. At most 2 verify blocks per prompt (D-009).
   let level: Level;
   if (policy) level = s.lastBlock === "policy" ? "person" : "fix";
   else if (fixerFailed || s.lastBlock === "escalate" || s.failures > RELEASE_AFTER) level = "person";
   else if (implementerFailed || s.failures === RELEASE_AFTER) level = "escalate";
-  else if (s.failures === DIAGNOSE_AT) level = "diagnose";
   else level = "fix";
 
   switch (level) {
     case "fix":
       return policy
         ? blockWith("policy", `${report}\n\n${POLICY_NOTE}`)
-        : blockWith("fix", `${report}\n\nVerification fails. Fix the cause (yourself, or by relaunching the implementer with this report), then finish.`);
-    case "diagnose":
-      return blockWith("diagnose", `${report}\n\nVerification failed ${s.failures} times in a row.\n${DIAGNOSE_METHOD}\n\nThen finish.`);
+        : blockWith("fix", `${report}\n\nVerification fails. Fix the cause (yourself, or by relaunching the implementer with this report), then finish.\n${DIAGNOSE_METHOD}`);
     case "escalate":
       return blockWith(
         "escalate",
@@ -132,7 +128,7 @@ async function verifyFailed(
       return letOut(
         policy
           ? "cc-improved: una regla de agentlint sigue fallando y necesita tu decisión (arreglo o excepción). Ejecuta /verify para ver el informe."
-          : "cc-improved: verify sigue fallando tras arreglar, diagnosticar y escalar al fixer. Decide tú cómo seguir; /verify muestra el informe.",
+          : "cc-improved: verify sigue fallando tras arreglar y escalar al fixer. Decide tú cómo seguir; /verify muestra el informe.",
       );
   }
 }

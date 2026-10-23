@@ -1,9 +1,9 @@
 ---
 name: task
-description: Empieza una tarea a partir de un ticket, una descripción o una spec. El agente lee el ticket y el código, propone un plan en plan mode y, cuando lo apruebas, lo implementa un subagente.
+description: Empieza una tarea a partir de un ticket, una descripción o una spec. El agente lee el ticket y el código y escribe un plan; las tareas grandes o de riesgo pasan por plan mode y tu aprobación, las pequeñas van por una ruta rápida. Lo implementa un subagente.
 argument-hint: "<TICKET-123 | descripción | ruta/spec.md | cancel>"
 disable-model-invocation: true
-allowed-tools: Bash(node --experimental-strip-types ${CLAUDE_PLUGIN_ROOT}/bin/wf-related.mjs:*)
+allowed-tools: Bash(node --experimental-strip-types ${CLAUDE_PLUGIN_ROOT}/bin/wf-related.mjs:*), Bash(node --experimental-strip-types ${CLAUDE_PLUGIN_ROOT}/bin/wf-plan-validate.mjs:*)
 ---
 
 # New task
@@ -25,9 +25,15 @@ Reuse their decisions and look at the files they touched. Speak Spanish to the u
    - If its `status` is `planning` or `implementing`, ask with AskUserQuestion: continue that task (recommended), replace it, or stop. To replace, delete the file and go on. To continue an `implementing` task, skip to section 5 with the plan stored in the file.
 4. Split the request: a ticket key (like `PAY-142`), spec files (paths of existing files named in the request) and the free-text description.
 
-## 2. Enter plan mode
+## 2. Choose the route
 
-Call EnterPlanMode now, before reading anything. Until the user approves, you only read; the only file you write is the plan file.
+The task is **small** only if all of these hold; any doubt means plan mode.
+
+- The plan will list at most 5 files, 3 `interface` entries and 1 decision.
+- No risk trigger: no dependency manifest or lockfile, no migration or schema, no auth, payments, billing, security, crypto or infra path, nothing under the manifest's `review.paths`, and `review.always` is not set.
+- Every name in the interface comes from the ticket, a spec or existing code; none needs the user to invent it.
+
+Small: **fast route**, no plan mode and no approval dialog; you only read until the plan is written. Otherwise: **plan mode**: call EnterPlanMode now, before reading anything; until the user approves you only read, and the only file you write is the plan file.
 
 ## 3. Read, in this order
 
@@ -38,7 +44,7 @@ Call EnterPlanMode now, before reading anything. Until the user approves, you on
 
 ## 4. Write the plan
 
-The plan file has a short human part (context, approach in numbered steps, risks) and exactly one `wf-plan` block with strict JSON (double quotes, no comments, no trailing commas). Template, to be replaced with the real task:
+The plan file (the plan mode file, or `.claude/workflow/plan.md` on the fast route) has a short human part (context, approach in numbered steps, risks) and exactly one `wf-plan` block with strict JSON (double quotes, no comments, no trailing commas). Template, to be replaced with the real task:
 
 ```wf-plan
 {
@@ -85,34 +91,28 @@ Rules for the block:
 
 ## 5. Approval and implementation
 
-1. Call ExitPlanMode. A hook validates the `wf-plan` block. If it denies the call, read the reason, fix the plan file and call ExitPlanMode again. If the reason asks you to ask the user something or to run a check, do exactly that first.
-2. The user approves in the native dialog. Do not write code yourself in this session: the implementer does.
-3. Launch the implementer with the Agent tool: `subagent_type: "cc-improved:implementer"`, `run_in_background: false` (subagents run in the background by default, and the gate needs this one in the foreground). Its prompt is the trimmed brief below and nothing else: no exploration notes, no ticket dump, no conversation.
+1. Get the plan accepted.
+   - **Plan mode:** call ExitPlanMode. A hook validates the `wf-plan` block. If it denies the call, read the reason, fix the plan file and call ExitPlanMode again. If the reason asks you to ask the user something or to run a check, do exactly that first. The user approves in the native dialog.
+   - **Fast route:** write the plan to `.claude/workflow/plan.md` and run `node --experimental-strip-types ${CLAUDE_PLUGIN_ROOT}/bin/wf-plan-validate.mjs .claude/workflow/plan.md --session ${CLAUDE_SESSION_ID} --data "${CLAUDE_PLUGIN_DATA}"`. It applies the same name, seam and decision checks as the hook and, on `ACCEPTED`, stores the task as implementing. On `REJECTED`, fix the file and run it again; if it says the task is not small, switch to plan mode. Do not tell the user the plan was approved: tell them the task is small and what you will do.
+2. Do not write code yourself in this session: the implementer does.
+3. Launch the implementer with the Agent tool: `subagent_type: "cc-improved:implementer"`, `run_in_background: false` (subagents run in the background by default, and the gate needs this one in the foreground). Its prompt is the brief below and nothing else: no exploration notes, no ticket dump, no conversation. Leave out any line that has nothing to put in it.
 
    ```
-   Task: <title> (<ticket key, if any>)
-
    Plan:
-   <the numbered approach steps of the plan>
+   <the numbered approach steps>
 
-   wf-plan block:
-   <the approved wf-plan JSON, verbatim>
+   wf-plan: <the accepted wf-plan JSON, verbatim, on one line>
 
-   Decisions already made by the user (do not ask again):
-   - <question> -> <answer>
+   ADRs to read: <docs/adr/ paths the decisions cite>
 
-   ADRs to read: <the docs/adr/ paths the decisions cite or the plan touches>
+   Verify (repo root, in order):
+   - <each manifest verify command, verbatim>
 
-   Verification commands (from .claude/workflow.json, run in order from the repo root):
-   - <each verify command, verbatim>
-
-   Project verification tools available (from .claude/skills/verify-app/SKILL.md; run them from the repo root to check your work before you finish):
-   - <tool name>: `<exact command from the skill>` - <when to use it; what its output means; what must be running first>
-
-   First write the tests at the seams in the listed test files and run only those to see them fail; then implement until they pass. Touch only the listed files and keep the interface names exactly.
+   Tools (verify-app skill):
+   - <name>: `<exact command>` - <when to use it; what its output means; what must run first>
    ```
 
-   The agents cannot ask anyone and read no skill on their own: the tools section is the only way they learn the project's tools. Copy each relevant tool's command verbatim from the skill. When the manifest has no `tools`, write `- none` under that heading.
+   The agents read no skill on their own: copy each relevant tool's command verbatim from the verify-app skill. With no `tools` in the manifest, omit the Tools section.
 
 4. Read the last line of its answer:
    - `DONE`: tell the user what changed and that verification passed, and ask them to check it and close the task with `/done`. Do not run `/done` yourself.

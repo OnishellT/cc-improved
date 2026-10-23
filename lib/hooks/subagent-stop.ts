@@ -1,14 +1,13 @@
 // SubagentStop gate.
-// implementer / fixer: interface contract, then the manifest's verify. Ladder per agent_id: 1st failure → fix,
-// 2nd → fix with the diagnosis method, 3rd → let it out with FAILED so the orchestrator escalates (implementer →
-// fixer, fixer → the person). reviewer / plan-check: store the `VERDICT:` of the final answer.
+// implementer / fixer: interface contract, then the manifest's verify. Ladder per agent_id (D-009): 1st failure → one
+// block that asks for the fix with the diagnosis method and allows ending with FAILED, 2nd → let it out with FAILED so
+// the orchestrator escalates (implementer → fixer, fixer → the person). reviewer / plan-check: store the `VERDICT:` of the final answer.
 // `stop_hook_active` is true on every continuation (spike 0.3), so the counts live in the session state instead.
 import { checkContract, formatContract } from "../contract.ts";
 import type { AgentGateState, SessionState, StopOutput, SubagentStopInput } from "../types.ts";
 import type { HookContext, HookModule } from "./dispatch.ts";
 import { recordPlanCheckVerdict } from "./exit-plan-mode.ts";
 import {
-  DIAGNOSE_AT,
   DIAGNOSE_METHOD,
   loadGateState,
   MAX_CONTRACT_BLOCKS,
@@ -41,7 +40,7 @@ async function implementerGate(input: SubagentStopInput, ctx: HookContext, name:
   // Already let out as failed: a stray stop after the release must not start the ladder again.
   if (gate.outcome === "failed") return undefined;
 
-  // Escalation order: fix → diagnose → stronger model (fixer) → the person.
+  // Escalation order: fix (with diagnosis) → stronger model (fixer) → the person.
   const next = name === "fixer" ? "the orchestrator asks the person how to continue" : `the orchestrator escalates to ${strongAgent("fixer", ctx.env)}`;
   const release = async (what: string): Promise<StopOutput> => {
     gate.outcome = "failed";
@@ -75,20 +74,17 @@ async function implementerGate(input: SubagentStopInput, ctx: HookContext, name:
   gate.failures++;
   if (gate.failures >= RELEASE_AFTER) return release(`verify falló ${gate.failures} veces seguidas`);
   await store(ctx, s);
-  if (gate.failures === DIAGNOSE_AT) {
-    return block(
-      [
-        result.report,
-        "",
-        `Verification failed ${gate.failures} times in a row.`,
-        DIAGNOSE_METHOD,
-        "",
-        "Before you stop, run the verification commands yourself. If they still fail, end your answer with `FAILED: <what still fails, the cause as far as you got, and what you tried>` instead of DONE: the gate will let you out and " +
-          `${next}.`,
-      ].join("\n"),
-    );
-  }
-  return block(`${result.report}\n\nFix the cause of this failure, run the verification commands again, then stop. A gate runs them every time you stop.`);
+  return block(
+    [
+      result.report,
+      "",
+      "Fix the cause of this failure.",
+      DIAGNOSE_METHOD,
+      "",
+      "Before you stop, run the verification commands yourself. If they still fail, end your answer with `FAILED: <what still fails, the cause as far as you got, and what you tried>` instead of DONE: the gate will let you out and " +
+        `${next}. A gate runs them every time you stop.`,
+    ].join("\n"),
+  );
 }
 
 async function pass(ctx: HookContext, s: SessionState, gate: AgentGateState): Promise<undefined> {

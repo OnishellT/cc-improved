@@ -169,7 +169,7 @@ export interface SessionState {
   retries: number;
   /** Diff reviews spent (or skipped as low risk) on the current task; one round only. */
   reviews: number;
-  /** Consecutive verify failures since the last pass: 2 adds the diagnosis method, 3 escalates to the fixer. */
+  /** Consecutive verify failures since the last pass: the 2nd escalates to the fixer (D-009). */
   failures: number;
   /** Strong-model plan checks spent on the current task. */
   planChecks: number;
@@ -203,7 +203,7 @@ export interface AgentGateState {
   role: string;
   /** Blocks spent on a missing interface contract. */
   contractBlocks: number;
-  /** Consecutive verify failures: 1 fix, 2 diagnose, 3 released with FAILED. */
+  /** Consecutive verify failures: 1 fix (with the diagnosis method), 2 released with FAILED (D-009). */
   failures: number;
   /** Blocks spent on agentlint (policy) failures; the second one goes to the person, not to a smarter model. */
   policyBlocks: number;

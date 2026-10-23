@@ -57,7 +57,7 @@ for (const [name, want] of Object.entries(expected)) {
       const prefix = `node --experimental-strip-types \${CLAUDE_PLUGIN_ROOT}/bin/${script}`;
       // Permission matching is literal: a quoted script path does not match the rule and the injection is refused.
       assert.ok(command === prefix || command.startsWith(`${prefix} `), `${name}: ${command} must start with ${prefix}`);
-      assert.equal(s.meta["allowed-tools"], `Bash(${prefix}:*)`);
+      assert.ok((s.meta["allowed-tools"] ?? "").split(", ").includes(`Bash(${prefix}:*)`), `${name}: allowed-tools covers ${script}`);
       await access(`${root}bin/${script}`);
     }
     if (!want.scripts.length) assert.equal(s.meta["allowed-tools"], undefined);
@@ -106,9 +106,11 @@ test("skill task: the implementer brief lists the project's verification tools f
   const { body } = await load("task");
   assert.match(body, /Keep its `verify` list, its `connectors` and its `tools`/);
   assert.match(body, /\*\*Tools\*\* section of `\.claude\/skills\/verify-app\/SKILL\.md`/);
-  const brief = /```\n\s*Task: <title>[\s\S]*?```/.exec(body)?.[0] ?? "";
-  assert.match(brief, /Project verification tools available \(from \.claude\/skills\/verify-app\/SKILL\.md/);
-  assert.match(brief, /`<exact command from the skill>`/);
+  const brief = /```\n\s*Plan:[\s\S]*?```/.exec(body)?.[0] ?? "";
+  assert.match(brief, /Tools \(verify-app skill\)/);
+  assert.match(brief, /`<exact command>`/);
+  assert.match(brief, /wf-plan: <the accepted wf-plan JSON/);
+  assert.match(brief, /Verify \(repo root, in order\)/);
 });
 
 test("skill setup: runs on the large model, a literal `opus` (user_config is not substituted in `model:`, D-010)", async () => {
@@ -127,4 +129,15 @@ test("skill setup: with setup done it warns about the cost and asks before repea
   assert.ok(start.indexOf('"done"') < start.indexOf("--start --language"), "the confirmation comes before --start");
   const { setupNote } = await import("../lib/hooks/session-start.ts");
   assert.equal(setupNote("done"), undefined);
+});
+
+test("skill task: small tasks take the fast route through wf-plan-validate; big or risky ones keep plan mode (D-009)", async () => {
+  const { meta, body } = await load("task");
+  assert.match(meta["allowed-tools"] ?? "", /bin\/wf-plan-validate\.mjs/);
+  assert.match(body, /\*\*fast route\*\*/);
+  assert.match(body, /wf-plan-validate\.mjs \.claude\/workflow\/plan\.md/);
+  assert.match(body, /ACCEPTED/);
+  assert.match(body, /REJECTED/);
+  assert.match(body, /at most 5 files, 3 `interface` entries and 1 decision/);
+  assert.match(body, /any doubt means plan mode/);
 });

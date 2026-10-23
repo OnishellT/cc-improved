@@ -71,7 +71,7 @@ Si el proyecto usa agentlint, `agentlint check --all` es un paso más de `verify
 
 ## 6. Corrección de errores
 
-El informe de `verify` vuelve al agente, y la presión sube con cada fallo: el primero, "arréglalo"; el segundo, se pide diagnosticar con la skill `diagnosing-bugs`; el tercero, se lanza el `fixer` con el modelo fuerte; después, decide la persona.
+El informe de `verify` vuelve al agente, y la presión sube con cada fallo: el primero, "arréglalo" con el método de diagnóstico; el segundo, se lanza el `fixer` con el modelo fuerte; después, decide la persona (D-009).
 
 Cuando `verify` pasa y el diff es arriesgado (grande, dependencias nuevas, migraciones, rutas sensibles, decisiones nuevas; `lib/risk.ts`), el `reviewer` (modelo fuerte, solo lectura) revisa el diff contra el plan, la interfaz, las ADRs y `CLAUDE.md` siguiendo `blast-radius`. Una ronda: si pide cambios, los hace el modelo barato y los comprueba `verify`, no otra revisión pagada. El reviewer no ejecuta herramientas; recibe en su brief lo que `verify` y las herramientas ya reportaron.
 
@@ -97,7 +97,7 @@ Fuera del plugin y a propósito. La última palabra sobre la funcionalidad la ti
 
 **Estado.** `.claude/workflow.json` es el estado del proyecto (versionado). `.claude/workflow/task.json` es la tarea activa (local, ignorada por git) con `status` (`planning` | `implementing` | `done`), `plan` y `sessionId`. El estado de gates va por `session_id` en `${CLAUDE_PLUGIN_DATA}/sessions/`; los hooks disparan en todas las sesiones del proyecto e ignoran el estado ajeno.
 
-**Modelos por fase.** La sesión y el `implementer` usan el modelo de la sesión. `plan-check`, `reviewer` y `fixer` usan `strong_model` (opción de usuario del plugin; `opus` por defecto, `sonnet` selecciona las variantes `-sonnet`). El modelo fuerte se usa en el chequeo del plan, en la revisión cuando hay riesgo y en el tercer intento de corrección.
+**Modelos por fase.** La sesión y el `implementer` usan el modelo de la sesión. `plan-check`, `reviewer` y `fixer` usan `strong_model` (opción de usuario del plugin; `opus` por defecto, `sonnet` selecciona las variantes `-sonnet`). El modelo fuerte se usa en el chequeo del plan, en la revisión cuando hay riesgo y en el segundo intento de corrección (D-009).
 
 **Skills por fase.** Las skills de método viven en `skills/` y los agents las nombran en su frontmatter (`tdd` para el implementer, `blast-radius` para el reviewer, `diagnosing-bugs` para el fixer): el modelo no elige una skill de método. `/setup` carga `grilling`, `domain-modeling`, `technical-writing` y `create-verification-skill`; `/done` carga `retro` y `maintain-verification-skill`.
 
