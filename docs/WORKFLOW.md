@@ -71,7 +71,7 @@ Si el proyecto usa agentlint, `agentlint check --all` es un paso más de `verify
 
 ## 6. Corrección de errores
 
-El informe de `verify` vuelve al agente, y la presión sube con cada fallo: el primero, "arréglalo"; el segundo, se pide diagnosticar con la skill `diagnosing-bugs`; el tercero, se lanza el `fixer` con el modelo fuerte; después, decide la persona.
+El informe de `verify` vuelve al agente, y la presión sube con cada fallo: el primero, "arréglalo" con el método de diagnóstico; el segundo, se lanza el `fixer` con el modelo fuerte; después, decide la persona (D-009).
 
 Cuando `verify` pasa y el diff es arriesgado (grande, dependencias nuevas, migraciones, rutas sensibles, decisiones nuevas; `lib/risk.ts`), el `reviewer` (modelo fuerte, solo lectura) revisa el diff contra el plan, la interfaz, las ADRs y `CLAUDE.md` siguiendo `blast-radius`. Una ronda: si pide cambios, los hace el modelo barato y los comprueba `verify`, no otra revisión pagada. El reviewer no ejecuta herramientas; recibe en su brief lo que `verify` y las herramientas ya reportaron.
 

@@ -11,9 +11,11 @@ import type { HookContext } from "./dispatch.ts";
 
 /** Plugin name: plugin agents arrive as `cc-improved:<agent>`. */
 export const PLUGIN = "cc-improved";
-/** Verify failures of one implementer/fixer: 1 fix, 2 diagnose, 3 released with FAILED. */
-export const RELEASE_AFTER = 3;
-export const DIAGNOSE_AT = 2;
+/**
+ * Verify failures of one implementer/fixer: the 1st blocks once (fix, with the diagnosis method and leave to end with
+ * FAILED), the 2nd releases it. The orchestrator escalates to the fixer on its 2nd. D-009.
+ */
+export const RELEASE_AFTER = 2;
 /** Contract blocks of one subagent before it is released as failed. */
 export const MAX_CONTRACT_BLOCKS = 3;
 /** Orchestrator Stop blocks per user prompt (contract, verify, review together), well below the harness cap of 8. */

@@ -9,7 +9,7 @@
     "strong_model": {
       "type": "string",
       "title": "Modelo fuerte",
-      "description": "Modelo de plan-check, reviewer y fixer: opus (por defecto), sonnet (usa las variantes -sonnet) u otro alias o id, que se pasa como model al lanzar el agente.",
+      "description": "Modelo al que se escala (nivel de riesgo high o review.always) y que usa el fixer: opus (por defecto), sonnet (usa las variantes -sonnet) u otro alias o id, que se pasa como model al lanzar el agente. Plan-check y reviewer usan -sonnet por defecto.",
       "default": "opus"
     }
   },

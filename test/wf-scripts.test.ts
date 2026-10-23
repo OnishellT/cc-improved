@@ -137,3 +137,92 @@ test("wf-done refuses what it cannot close and says why", async () => {
   await writeFile(taskPath(root), "{ not json");
   assert.match((await run("wf-done.mjs", root)).stdout, /^NOT CLOSED: \.claude\/workflow\/task\.json is unreadable/);
 });
+
+// ---------------------------------------------------------------------------
+// wf-plan-validate: the fast route applies the ExitPlanMode gates
+// ---------------------------------------------------------------------------
+
+const wfPlan = (over: Record<string, unknown> = {}) => ({
+  title: "Add sub to math",
+  spec: ["docs/spec.md"],
+  files: ["src/math.js", "src/math.test.js"],
+  interface: [{ file: "src/math.js", exports: ["sub"], source: "docs/spec.md" }],
+  seams: [{ name: "sub subtracts", testFile: "src/math.test.js", catches: "wrong sign" }],
+  decisions: [],
+  ...over,
+});
+const planMd = (plan: unknown) => `# Plan\n\n\`\`\`wf-plan\n${JSON.stringify(plan, null, 2)}\n\`\`\`\n`;
+
+async function fastProject(manifest: Record<string, unknown> = {}) {
+  const root = await project();
+  await mkdir(path.join(root, "docs"), { recursive: true });
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await mkdir(path.join(root, ".claude/workflow"), { recursive: true });
+  await writeFile(path.join(root, "docs/spec.md"), "Add `sub(a, b)` to the math module.\n");
+  await writeFile(path.join(root, "src/math.js"), "export const add = (a, b) => a + b;\n");
+  await writeFile(path.join(root, ".claude/workflow.json"), JSON.stringify({ version: 1, setup: "done", verify: [], connectors: [], ...manifest }));
+  return root;
+}
+const validate = async (root: string, plan: unknown, extra: string[] = []) => {
+  await writeFile(path.join(root, ".claude/workflow/plan.md"), typeof plan === "string" ? plan : planMd(plan));
+  return run("wf-plan-validate.mjs", root, [".claude/workflow/plan.md", ...extra]);
+};
+
+test("wf-plan-validate accepts a small valid plan and stores task.json as implementing", async () => {
+  const root = await fastProject();
+  const { code, stdout } = await validate(root, wfPlan(), ["--session", "s-1"]);
+  assert.equal(code, 0);
+  assert.match(stdout, /^ACCEPTED: "Add sub to math"/);
+  const stored = JSON.parse(await readFile(taskPath(root), "utf8"));
+  assert.equal(stored.status, "implementing");
+  assert.equal(stored.sessionId, "s-1");
+  assert.deepEqual(stored.plan.interface[0].exports, ["sub"]);
+  assert.match(stored.planFilePath, /plan\.md$/);
+});
+
+test("wf-plan-validate rejects an invented name, the same gate as ExitPlanMode, and saves nothing", async () => {
+  const root = await fastProject();
+  const { code, stdout } = await validate(root, wfPlan({ interface: [{ file: "src/math.js", exports: ["sub", "powerOfTwo"], source: "docs/spec.md" }] }));
+  assert.equal(code, 0);
+  assert.match(stdout, /^REJECTED/);
+  assert.match(stdout, /src\/math\.js: powerOfTwo/);
+  await assert.rejects(readFile(taskPath(root), "utf8"));
+});
+
+test("wf-plan-validate rejects a seam test file outside files, a missing spec and a bad block", async () => {
+  const root = await fastProject();
+  const seam = await validate(root, wfPlan({ files: ["src/math.js"] }));
+  assert.match(seam.stdout, /testFile src\/math\.test\.js is not in files/);
+  const spec = await validate(root, wfPlan({ spec: ["docs/nope.md"] }));
+  assert.match(spec.stdout, /spec docs\/nope\.md does not exist/);
+  const bad = await validate(root, "# Plan without a block\n");
+  assert.match(bad.stdout, /^REJECTED[\s\S]*No ```wf-plan block/);
+});
+
+test("wf-plan-validate sends big or risky plans to plan mode", async () => {
+  const root = await fastProject();
+  const files = ["src/math.js", "src/math.test.js", "a.js", "b.js", "c.js", "d.js"];
+  assert.match((await validate(root, wfPlan({ files }))).stdout, /^REJECTED: this task is not small[\s\S]*plan mode/);
+  const risky = await validate(root, wfPlan({ files: ["src/math.js", "src/math.test.js", "package.json"] }));
+  assert.match(risky.stdout, /^REJECTED: this task is not small \(dependencias/);
+  assert.match((await validate(await fastProject({ review: { always: true } }), wfPlan())).stdout, /review\.always/);
+  await assert.rejects(readFile(taskPath(root), "utf8"));
+});
+
+test("wf-plan-validate refuses without a manifest and reports an unreadable file", async () => {
+  const root = await project();
+  assert.match((await run("wf-plan-validate.mjs", root, ["x.md"])).stdout, /^REJECTED: .*\/setup/);
+  const withManifest = await fastProject();
+  assert.match((await run("wf-plan-validate.mjs", withManifest, ["missing.md"])).stdout, /^REJECTED: cannot read missing\.md/);
+  assert.match((await run("wf-plan-validate.mjs", withManifest)).stdout, /^REJECTED: pass the plan file/);
+});
+
+test("wf-plan-validate reads the ticket text captured for the session, like the hook", async () => {
+  const root = await fastProject();
+  const data = path.join(root, "data");
+  const plan = wfPlan({ ticket: "PAY-1", spec: [], interface: [{ file: "src/math.js", exports: ["sub"], source: "PAY-1" }] });
+  assert.match((await validate(root, plan, ["--session", "s-1", "--data", data])).stdout, /^REJECTED[\s\S]*src\/math\.js: sub/);
+  await mkdir(path.join(data, "evidence"), { recursive: true });
+  await writeFile(path.join(data, "evidence", "s-1.txt"), "PAY-1: add sub(a, b) to math");
+  assert.match((await validate(root, plan, ["--session", "s-1", "--data", data])).stdout, /^ACCEPTED/);
+});
