@@ -30,6 +30,31 @@ Write `.claude/skills/verify-<app>/SKILL.md` with YAML frontmatter (`name: verif
 - **Evidence:** what to capture for a proof and where it goes. State the proof standards: exercise the real user path, not internal setters or test-only endpoints; capture the action and the resulting state, not just the final screen; verify side effects (files written, rows inserted, messages sent) alongside what's visible; mocks only where a production boundary already isolates the external system. When the safe path is a dry-run or test mode, verify what it actually skips by observing (files, network, git refs) rather than trusting its name: some dry-runs still touch the network or open a browser.
 - **Cleanup:** how to tear down instances the run created. Never kill by process name; kill what you started. Cleanup removes instances and scratch state, never the evidence: proof artifacts survive the teardown, in a location the skill names.
 - **Helpers:** any script the skill ships is executable and its invocation is shown in the skill body. A helper the reader has to reverse-engineer is not a helper.
+- **Tools:** the project's verification tools (section 2b), one entry each: name, exact command, when to use it, what its output means.
+
+## 2b. Write the project's verification tools
+
+The skill tells an agent *how* to check; a tool lets it check in one command. Subagents (implementer, fixer) cannot ask anyone and get only a short brief, so every repeatable check that proves "it works" here (the app starts, an endpoint answers, a page renders, a row lands, the build artifact is sane) becomes a small tool inside the repo. The plugin ships no tools and assumes no stack: you design each one with the user, from what the interview found, in the folder you agree on (default `tools/verify/`).
+
+Every tool meets this contract:
+
+- **One purpose.** It proves one thing; its file name says what (`check_health.py`, `ui-smoke.sh`).
+- **`--help`.** States the purpose, the arguments, the output format, the exit codes and its side effects. `--help` itself does nothing else: setup runs it to validate the tool.
+- **Bounded, structured output.** Exit 0 pass, 1 fail, 2 bad usage. Stdout is one JSON object (`{"tool", "ok", "checks": [{"name", "ok", "detail"}]}`) or a few short lines; cap details (a few hundred characters each) so a failure fits in an agent's context. No progress bars, no full logs: point to a file under `.claude/workflow/` instead.
+- **No dangerous effects.** Read-only by default. Anything that writes (seeding data, starting an instance) only touches a test environment the tool creates and cleans itself, never the user's data, shared services or production; say so in `--help`.
+- **Declared, portable runtime.** Exactly one of:
+  - `python`: a Python 3 script that imports only the standard library (no pip, no virtualenv), started as `python3 <path>`. Template: [`references/verify-tools/python-tool.py`](references/verify-tools/python-tool.py).
+  - `nix`: a script plus a `shell.nix` (pinned nixpkgs) or `flake.nix` (with its `flake.lock`) in the same folder that pins every binary it calls. Use it only when the check needs system binaries. Templates: [`references/verify-tools/nix/`](references/verify-tools/nix/). A flake's files must be committed for other machines.
+  No implicit global dependency: a tool never relies on something installed on this machine that its runtime does not provide.
+- **Executable.** `chmod +x`, with a shebang.
+
+Use the project's own commands inside a tool when they exist; the templates' probes are EXAMPLES to replace, not checks to keep. Run each tool once against the real app (pass and fail) before registering it.
+
+Register every tool in three places:
+
+1. `wf-setup-finish.mjs --tool <python|nix>:<path>` (one per tool). It checks the file exists, is executable, has its nix env, imports only the stdlib (python), answers `--help`, and is named in the verify-app skill; it prints the exact command for each tool. A runtime missing on this machine is only a warning: the user installs it, never you.
+2. The verify-app skill (`.claude/skills/verify-app/SKILL.md`), section **Tools**: for each tool its name, the exact command `wf-setup-finish.mjs` printed (python: `python3 <path> <args>`; shell.nix: `nix-shell <env> --run '<path> <args>'`; flake: `nix --extra-experimental-features 'nix-command flakes' develop path:./<dir> --command <path> <args>`), when to use it, what its output means and what it needs running first. Repeat the tool in the `.claude/skills/domain-*` skill of the area it checks, when there is one.
+3. `.claude/workflow.json` `verify` (`--step`), only for a tool that runs green headlessly from a clean checkout (it starts and stops whatever it needs). A tool that needs an app the user starts stays out of `verify`: agents run it from the skill.
 
 ## 3. Seed the feature map
 

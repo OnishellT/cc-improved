@@ -8,9 +8,12 @@
 //   --language <lang>       language of questions and docs
 //   --connector <id[:server]>  enabled connector, repeatable; `server` is its key in `.mcp.json`
 //   --agentlint "<prefix>"  agentlint command prefix when the project enforces agentlint rules
+//   --tool <runtime>:<path> a verification tool written for this project, repeatable; runtime is python or nix
+//                           (nix: a flake.nix or shell.nix next to the script pins its dependencies)
 //   --accept-failing-verify finish even though verify fails (only when the user chose so)
 //
 // Exit 0: done (or started). Exit 1: problems or verify failed; the report says what to fix. Exit 2: bad usage.
+import { execFile } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,10 +28,47 @@ const ADR_NAME = /^\d{4}-[a-z0-9][a-z0-9-]*\.md$/;
 /** Lines `.gitignore` needs: local workflow state ignored, the closed-task log committed. */
 const IGNORE_LINES = [`${WORKFLOW_DIR}/*`, `!${TASKS_LOG_PATH}`];
 
+/** Runtimes a project verification tool may declare (`VerifyTool` in lib/types.ts). */
+export const TOOL_RUNTIMES = ["python", "nix"];
+/** Env files that pin a nix tool's dependencies, looked up next to the script, in this order. */
+const NIX_ENVS = ["flake.nix", "shell.nix"];
+/** `--help` budget per runtime: a nix env may have to be built the first time. */
+const HELP_TIMEOUT_MS = { python: 30_000, nix: 10 * 60_000 };
+/** Lists the top-level imports of a python file that are neither stdlib nor files next to it. Needs Python >= 3.10. */
+const STDLIB_CHECK = `
+import ast, json, os, sys
+p = sys.argv[1]
+d = os.path.dirname(os.path.abspath(p))
+std = getattr(sys, "stdlib_module_names", None)
+names = set()
+for n in ast.walk(ast.parse(open(p, encoding="utf-8").read(), p)):
+    if isinstance(n, ast.Import):
+        names.update(a.name.split(".")[0] for a in n.names)
+    elif isinstance(n, ast.ImportFrom) and not n.level and n.module:
+        names.add(n.module.split(".")[0])
+local = lambda m: os.path.exists(os.path.join(d, m + ".py")) or os.path.isdir(os.path.join(d, m))
+print(json.dumps([] if std is None else sorted(m for m in names if m not in std and m != "__future__" and not local(m))))
+`;
+
 class Usage extends Error {}
 
+/** Repo-relative POSIX path, or undefined when it is absolute or leaves the repo. */
+function repoPath(file) {
+  const norm = path.posix.normalize(file.replaceAll("\\", "/")).replace(/^(\.\/)+/, "");
+  return !norm || norm === "." || path.posix.isAbsolute(norm) || norm === ".." || norm.startsWith("../") ? undefined : norm;
+}
+
+function parseTool(spec) {
+  const i = spec.indexOf(":");
+  const runtime = spec.slice(0, i);
+  const file = repoPath(spec.slice(i + 1));
+  if (i < 1 || !TOOL_RUNTIMES.includes(runtime)) throw new Usage(`--tool needs "<${TOOL_RUNTIMES.join("|")}>:<path>", got "${spec}"`);
+  if (!file) throw new Usage(`--tool ${spec}: the path must be relative and inside the repo`);
+  return { path: file, runtime };
+}
+
 function parseArgs(argv) {
-  const opts = { start: false, pause: false, steps: [], connectors: [], acceptFailing: false };
+  const opts = { start: false, pause: false, steps: [], connectors: [], tools: [], acceptFailing: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const value = () => {
@@ -41,6 +81,7 @@ function parseArgs(argv) {
     else if (arg === "--step") opts.steps.push(value());
     else if (arg === "--language") opts.language = value();
     else if (arg === "--agentlint") opts.agentlint = value();
+    else if (arg === "--tool") opts.tools.push(parseTool(value()));
     else if (arg === "--connector") {
       const [id, server] = value().split(":");
       if (!id) throw new Usage("--connector needs an id");
@@ -85,6 +126,8 @@ export function manifestProblems(m) {
   }
   for (const key of ["language", "startedAt", "completedAt", "agentlint"]) if (m[key] !== undefined && typeof m[key] !== "string") p.push(`${MANIFEST_PATH}: "${key}" must be a string.`);
   if (m.review !== undefined && (typeof m.review !== "object" || Array.isArray(m.review))) p.push(`${MANIFEST_PATH}: "review" must be an object.`);
+  const badTool = (t) => !t || typeof t.path !== "string" || !repoPath(t.path) || !TOOL_RUNTIMES.includes(t.runtime) || (t.env !== undefined && (typeof t.env !== "string" || !repoPath(t.env)));
+  if (m.tools !== undefined && (!Array.isArray(m.tools) || m.tools.some(badTool))) p.push(`${MANIFEST_PATH}: "tools" must be a list of {"path", "runtime": ${TOOL_RUNTIMES.map((r) => `"${r}"`).join(" | ")}, "env"?} with repo-relative paths.`);
   return p;
 }
 
@@ -104,7 +147,7 @@ function saveManifest(root, manifest) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
   // Keys in the order of `Manifest` (lib/types.ts), then anything else the file already had.
-  const order = ["version", "setup", "language", "startedAt", "completedAt", "verify", "review", "connectors", "agentlint"];
+  const order = ["version", "setup", "language", "startedAt", "completedAt", "verify", "tools", "review", "connectors", "agentlint"];
   const sorted = Object.fromEntries([...order.filter((k) => k in manifest).map((k) => [k, manifest[k]]), ...Object.entries(manifest).filter(([k]) => !order.includes(k))]);
   fs.writeFileSync(tmp, `${JSON.stringify(sorted, null, 2)}\n`);
   fs.renameSync(tmp, file);
@@ -187,6 +230,122 @@ export function checkOutputs(root, manifest) {
   return [...new Set(p)];
 }
 
+/** Runs a file with args from `cwd`; resolves { code, out }. Never rejects; code is null when it could not start or timed out. */
+function exec(file, args, cwd, timeout) {
+  return new Promise((resolve) => {
+    const child = execFile(file, args, { cwd, timeout, killSignal: "SIGKILL", encoding: "utf8", maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+      const code = err ? (typeof err.code === "number" ? err.code : null) : 0;
+      resolve({ code, out: `${stdout ?? ""}${stderr ?? ""}`.trim() });
+    });
+    child.stdin?.end();
+  });
+}
+
+const onPath = async (bin, cwd) => (await exec("sh", ["-c", 'command -v -- "$1"', "_", bin], cwd, 10_000)).code === 0;
+const forceQuote = (word) => `'${word.replaceAll("'", "'\\''")}'`;
+const quote = (word) => (/^[\w@%+=:,./-]+$/.test(word) ? word : forceQuote(word));
+
+/** The nix env file of a tool: the declared one, else the first of NIX_ENVS next to the script that exists. */
+export function toolEnv(root, tool) {
+  if (tool.runtime !== "nix") return undefined;
+  if (tool.env) return tool.env;
+  const dir = path.posix.dirname(tool.path);
+  return NIX_ENVS.map((f) => (dir === "." ? f : `${dir}/${f}`)).find((f) => fs.existsSync(path.join(root, f)));
+}
+
+/** The binary that runs a tool: python3, or nix / nix-shell for a flake / shell.nix env. */
+export const toolRuntimeBin = (tool) => (tool.runtime === "python" ? "python3" : path.posix.basename(tool.env ?? "") === "flake.nix" ? "nix" : "nix-shell");
+
+/**
+ * How to run a tool with `args`, from the repo root: `{ file, args, display }`. `display` is the exact command line
+ * the verify-app skill and the /task brief give the agents.
+ */
+export function toolCommand(tool, args = []) {
+  const script = tool.path.includes("/") ? tool.path : `./${tool.path}`;
+  if (tool.runtime === "python") {
+    const argv = [tool.path, ...args];
+    return { file: "python3", args: argv, display: ["python3", ...argv].map(quote).join(" ") };
+  }
+  if (toolRuntimeBin(tool) === "nix") {
+    const dir = path.posix.dirname(tool.env);
+    const argv = ["--extra-experimental-features", "nix-command flakes", "develop", `path:./${dir === "." ? "" : dir}`, "--command", script, ...args];
+    return { file: "nix", args: argv, display: ["nix", ...argv].map(quote).join(" ") };
+  }
+  const inner = [script, ...args].map(quote).join(" ");
+  return { file: "nix-shell", args: [tool.env, "--run", inner], display: `nix-shell ${quote(tool.env)} --run ${forceQuote(inner)}` };
+}
+
+/**
+ * Checks each verification tool: inside the repo, executable, pinned (nix env, python stdlib only), answering `--help`
+ * with exit 0, and named in the verify-app skill. `--help` must not have side effects, so nothing else is run.
+ * A runtime missing on this machine is a warning: the person installs it (`/wf-doctor` reports it), the plugin never does.
+ */
+export async function checkTools(root, tools) {
+  const problems = [];
+  const warnings = [];
+  const ready = [];
+  const skill = read(path.join(root, ".claude/skills/verify-app/SKILL.md")) ?? "";
+  const seen = new Set();
+  for (const declared of tools) {
+    const where = `tool ${declared.path}`;
+    if (seen.has(declared.path)) {
+      problems.push(`${where} is registered twice.`);
+      continue;
+    }
+    seen.add(declared.path);
+    const file = path.join(root, declared.path);
+    let stat;
+    try {
+      stat = fs.statSync(file);
+    } catch {
+      problems.push(`${where} does not exist. Write it or drop its --tool.`);
+      continue;
+    }
+    if (!stat.isFile()) {
+      problems.push(`${where} is not a file.`);
+      continue;
+    }
+    if (!(stat.mode & 0o111)) problems.push(`${where} is not executable: chmod +x ${declared.path}.`);
+    const tool = { ...declared };
+    if (tool.runtime === "nix") {
+      tool.env = toolEnv(root, tool);
+      if (!tool.env) {
+        problems.push(`${where} declares runtime nix but has no ${NIX_ENVS.join(" or ")} next to it that pins its dependencies.`);
+        continue;
+      }
+      if (!fs.existsSync(path.join(root, tool.env))) {
+        problems.push(`${where}: its nix env ${tool.env} does not exist.`);
+        continue;
+      }
+    }
+    const { display } = toolCommand(tool);
+    if (!skill.includes(tool.path)) problems.push(`.claude/skills/verify-app/SKILL.md does not name ${where}: add its exact command (${display}), when to use it and what its output means.`);
+    const bin = toolRuntimeBin(tool);
+    if (!(await onPath(bin, root))) {
+      warnings.push(`${where}: \`${bin}\` is not installed here, so --help was not checked. Install ${tool.runtime === "python" ? "Python 3" : "nix"} and run /wf-doctor.`);
+      ready.push({ tool, display });
+      continue;
+    }
+    if (tool.runtime === "python") {
+      const r = await exec("python3", ["-c", STDLIB_CHECK, tool.path], root, 30_000);
+      if (r.code !== 0) problems.push(`${where} does not parse as Python 3:\n${r.out.slice(-1000)}`);
+      else {
+        let extra = [];
+        try {
+          extra = JSON.parse(r.out.split("\n").pop() ?? "[]");
+        } catch {}
+        if (extra.length) problems.push(`${where} imports modules outside the Python standard library (${extra.join(", ")}). Use the stdlib only, or make it a nix tool that pins them.`);
+      }
+    }
+    const { file: runFile, args } = toolCommand(tool, ["--help"]);
+    const help = await exec(runFile, args, root, HELP_TIMEOUT_MS[tool.runtime]);
+    if (help.code !== 0) problems.push(`\`${toolCommand(tool, ["--help"]).display}\` ${help.code === null ? "did not finish (timeout or could not start)" : `exited ${help.code}`}:\n${help.out.slice(-1000)}`);
+    else if (!help.out) problems.push(`\`${toolCommand(tool, ["--help"]).display}\` printed nothing: --help must state the purpose, the arguments and the output.`);
+    ready.push({ tool, display });
+  }
+  return { problems, warnings, tools: ready };
+}
+
 /** Adds the workflow lines to `.gitignore` unless the folder is already covered. */
 function ensureIgnored(root) {
   const file = path.join(root, ".gitignore");
@@ -213,6 +372,7 @@ export async function main(argv, env = process.env, cwd = process.cwd()) {
     if (opts.connectors.length) manifest.connectors = opts.connectors;
     if (opts.agentlint) manifest.agentlint = opts.agentlint;
     if (opts.steps.length) manifest.verify = opts.steps;
+    if (opts.tools.length) manifest.tools = opts.tools;
 
     if (opts.start && opts.pause) throw new Usage("--start and --pause exclude each other");
     if (opts.start || opts.pause) {
@@ -227,6 +387,16 @@ export async function main(argv, env = process.env, cwd = process.cwd()) {
 
     const problems = manifestProblems({ ...manifest, setup: manifest.setup ?? "pending" });
     problems.push(...checkOutputs(root, manifest));
+    const toolsValid = Array.isArray(manifest.tools) && !manifestProblems({ ...manifest, setup: "pending" }).some((l) => l.includes('"tools"'));
+    const tools = toolsValid ? await checkTools(root, manifest.tools) : { problems: [], warnings: [], tools: [] };
+    problems.push(...tools.problems);
+    const toolReport = () => {
+      if (!tools.tools.length && !tools.warnings.length) return;
+      say("Verification tools (give agents these exact commands):");
+      for (const { display } of tools.tools) say(`- ${display}`);
+      for (const line of tools.warnings) say(`! ${line}`);
+      say("");
+    };
     let verify = manifest.verify;
     if (manifest.agentlint) {
       if (!hasAgentlintConfig(root)) problems.push(`agentlint is not configured: run \`${manifest.agentlint} init\` and add the rules the user selected.`);
@@ -238,12 +408,15 @@ export async function main(argv, env = process.env, cwd = process.cwd()) {
       if (!verify.some((s) => /\bagentlint\b/.test(s))) verify = [...verify, `${manifest.agentlint} check --all`];
     }
     if (problems.length) {
+      toolReport();
       say("Setup incomplete:");
       for (const line of problems) say(`- ${line}`);
       say("\nFix these and run wf-setup-finish.mjs again.");
       return { code: 1, text: out.join("\n") };
     }
 
+    if (tools.tools.length) manifest.tools = tools.tools.map(({ tool }) => tool);
+    toolReport();
     const result = await runVerify(verify, root);
     say(formatVerify(result));
     manifest.verify = verify;

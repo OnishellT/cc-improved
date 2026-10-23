@@ -4,10 +4,11 @@
 // Run as: node --experimental-strip-types "${CLAUDE_PLUGIN_ROOT}/bin/wf-doctor.mjs" [--json] (the flag is a no-op on Node >= 22.18).
 // Output for the person is Spanish. Verify commands are looked up, never executed.
 import { execFile } from "node:child_process";
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MANIFEST_PATH, manifestPath, projectDir } from "../lib/paths.ts";
+import { TOOL_RUNTIMES, toolEnv, toolRuntimeBin } from "./wf-setup-finish.mjs";
 
 const MIN_NODE = [22, 0];
 const SETUP = ["pending", "running", "done", "declined"];
@@ -92,6 +93,9 @@ async function readManifest(root) {
   if (!Array.isArray(data.connectors) || data.connectors.some((c) => typeof c?.id !== "string")) errors.push("`connectors` debe ser una lista de objetos con `id`");
   if (data.agentlint !== undefined && (typeof data.agentlint !== "string" || !data.agentlint.trim())) errors.push("`agentlint` debe ser texto no vacío");
   if (data.review !== undefined && (typeof data.review !== "object" || data.review === null || Array.isArray(data.review))) errors.push("`review` debe ser un objeto");
+  if (data.tools !== undefined && (!Array.isArray(data.tools) || data.tools.some((t) => typeof t?.path !== "string" || !TOOL_RUNTIMES.includes(t?.runtime)))) {
+    errors.push(`\`tools\` debe ser una lista de objetos con \`path\` y \`runtime\` (${TOOL_RUNTIMES.join(" o ")})`);
+  }
   return errors.length ? { errors } : { manifest: data };
 }
 
@@ -123,6 +127,30 @@ async function checkAgentlint(manifest, root) {
   return r.code === 0 ? ok("agentlint", manifest.agentlint) : warn("agentlint", `\`${manifest.agentlint} --help\` falló (código ${r.code}): revisa la instalación.`);
 }
 
+const INSTALL = { python: "instala Python 3 (python3)", nix: "instala nix (https://nixos.org/download)" };
+
+/** The project's verification tools: each file exists and is executable, and its runtime (python3, nix-shell or nix) is installed. */
+async function checkTools(manifest, root) {
+  const tools = manifest.tools ?? [];
+  if (!tools.length) return ok("herramientas", "ninguna registrada (opcional; /setup las crea)");
+  const problems = [];
+  const runtimes = new Set();
+  for (const declared of tools) {
+    const tool = { ...declared, env: toolEnv(root, declared) };
+    const info = await stat(path.join(root, tool.path)).catch(() => undefined);
+    if (!info?.isFile()) problems.push(`no existe \`${tool.path}\``);
+    else if (!(info.mode & 0o111)) problems.push(`\`${tool.path}\` no es ejecutable (chmod +x)`);
+    if (tool.runtime === "nix" && !tool.env) problems.push(`\`${tool.path}\` no tiene flake.nix ni shell.nix al lado`);
+    else if (tool.env && !(await stat(path.join(root, tool.env)).catch(() => undefined))) problems.push(`no existe \`${tool.env}\` (entorno nix de \`${tool.path}\`)`);
+    const bin = toolRuntimeBin(tool);
+    if (!(await resolves(bin, root))) problems.push(`\`${tool.path}\` necesita \`${bin}\`: ${INSTALL[tool.runtime]}`);
+    else runtimes.add(bin);
+  }
+  return problems.length
+    ? fail("herramientas", `${problems.join("; ")}. Los subagentes no podrán usarlas hasta que lo corrijas.`)
+    : ok("herramientas", `${tools.length} registrada(s); runtime disponible: ${[...runtimes].sort().join(", ")} (no se ejecutan aquí)`);
+}
+
 /** The plugin's own agents: each file needs frontmatter with a name that matches the file and a description. */
 async function checkAgents(dir) {
   const files = (await readdir(dir).catch(() => [])).filter((f) => f.endsWith(".md")).sort();
@@ -152,6 +180,7 @@ export async function runDoctor({ root = projectDir(), version = process.version
   if (read.manifest) {
     checks.push(await safe("verify", () => checkVerify(read.manifest, root)));
     checks.push(await safe("agentlint", () => checkAgentlint(read.manifest, root)));
+    checks.push(await safe("herramientas", () => checkTools(read.manifest, root)));
   }
   checks.push(await safe("agents", () => checkAgents(agentsDir)));
   return checks;

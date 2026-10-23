@@ -46,7 +46,7 @@ const allTools = { git: 'echo "git version 9"', gh: "exit 0", mytool: "exit 0" }
 test("healthy project: every check passes and exit code is 0", async () => {
   const r = await doctor(await sandbox({ manifest: good, stubs: allTools }));
   assert.equal(r.code, 0);
-  for (const name of ["Node", "git", "gh", "manifest", "verify", "agentlint", "agents"]) assert.equal(get(r, name)?.status, "ok", name);
+  for (const name of ["Node", "git", "gh", "manifest", "verify", "agentlint", "herramientas", "agents"]) assert.equal(get(r, name)?.status, "ok", name);
 });
 
 test("human output is Spanish with marks and a summary", async () => {
@@ -133,4 +133,51 @@ test("git missing fails", async () => {
   // /usr/bin may hold a real git; the check still must report the state it found, so only assert the shape.
   const r = await doctor(await sandbox({ manifest: good, stubs: noGit }));
   assert.ok(["ok", "fail"].includes(get(r, "git")!.status));
+});
+
+test("verification tools: none is fine; each needs its file and its runtime (python3, nix-shell or nix)", async () => {
+  const none = await doctor(await sandbox({ manifest: good, stubs: allTools }));
+  assert.equal(get(none, "herramientas")?.status, "ok");
+  assert.match(get(none, "herramientas")!.detail, /ninguna registrada/);
+
+  const tools = [
+    { path: "tools/verify/check.py", runtime: "python" },
+    { path: "tools/ui/smoke.sh", runtime: "nix", env: "tools/ui/shell.nix" },
+  ];
+  const s = await sandbox({ manifest: { ...good, tools }, stubs: { ...allTools, python3: "exit 0", "nix-shell": "exit 0" } });
+  for (const file of ["tools/verify/check.py", "tools/ui/smoke.sh", "tools/ui/shell.nix"]) {
+    await mkdir(path.dirname(path.join(s.root, file)), { recursive: true });
+    await writeFile(path.join(s.root, file), "#!/bin/sh\n");
+    await chmod(path.join(s.root, file), 0o755);
+  }
+  const ready = get(await doctor(s), "herramientas")!;
+  assert.equal(ready.status, "ok", ready.detail);
+  assert.match(ready.detail, /2 registrada\(s\); runtime disponible: nix-shell, python3/);
+
+  await chmod(path.join(s.root, "tools/verify/check.py"), 0o644);
+  const notExec = get(await doctor(s), "herramientas")!;
+  assert.equal(notExec.status, "fail");
+  assert.match(notExec.detail, /check\.py` no es ejecutable/);
+});
+
+test("verification tools: a missing runtime or file fails with what to install, in Spanish", async (t) => {
+  const s = await sandbox({ manifest: { ...good, tools: [{ path: "tools/ui/smoke.sh", runtime: "nix", env: "tools/ui/shell.nix" }, { path: "tools/gone.py", runtime: "python" }] }, stubs: allTools });
+  const found = await new Promise<boolean>((resolve) => execFile("sh", ["-c", "command -v nix-shell"], { env: { PATH: `${s.bin}:${NODE_DIR}:/usr/bin:/bin` } }, (err) => resolve(!err)));
+  if (found) return t.skip("nix-shell is installed in a system path of this machine");
+  await mkdir(path.join(s.root, "tools/ui"), { recursive: true });
+  await writeFile(path.join(s.root, "tools/ui/smoke.sh"), "#!/bin/sh\n");
+  await chmod(path.join(s.root, "tools/ui/smoke.sh"), 0o755);
+  const r = await doctor(s);
+  const c = get(r, "herramientas")!;
+  assert.equal(c.status, "fail");
+  assert.match(c.detail, /necesita `nix-shell`: instala nix/);
+  assert.match(c.detail, /no existe `tools\/ui\/shell\.nix`/);
+  assert.match(c.detail, /no existe `tools\/gone\.py`/);
+  assert.equal(r.code, 1);
+});
+
+test("a manifest with malformed tools fails", async () => {
+  const r = await doctor(await sandbox({ manifest: { ...good, tools: [{ path: "x", runtime: "ruby" }] }, stubs: allTools }));
+  assert.equal(get(r, "manifest")?.status, "fail");
+  assert.match(get(r, "manifest")!.detail, /`tools`/);
 });
