@@ -47,12 +47,21 @@ export function role(agentType: string | undefined): string {
   return (parts.at(-1) ?? "").replace(/-sonnet$/, "");
 }
 
-/** Agent to launch for a strong role, following the `strong_model` user config (spike 0.4: two variants per role). */
-export function strongAgent(name: "reviewer" | "fixer" | "plan-check", env: Env): string {
+/**
+ * Agent (and `model` override) to launch for a strong role, following the `strong_model` user config, which reaches
+ * hooks as `CLAUDE_PLUGIN_OPTION_STRONG_MODEL` (spike 0.4: two variants per role, `model:` cannot use the option).
+ */
+export function strongAgentChoice(name: "reviewer" | "fixer" | "plan-check", env: Env): { agent: string; model?: string } {
   const model = (env.CLAUDE_PLUGIN_OPTION_STRONG_MODEL ?? "").trim();
-  if (/sonnet/i.test(model)) return `\`${PLUGIN}:${name}-sonnet\``;
-  if (!model || /^opus$/i.test(model) || model.includes("${")) return `\`${PLUGIN}:${name}\``;
-  return `\`${PLUGIN}:${name}\` with \`model: "${model}"\``;
+  if (/sonnet/i.test(model)) return { agent: `${PLUGIN}:${name}-sonnet` };
+  if (!model || /^opus$/i.test(model) || model.includes("${")) return { agent: `${PLUGIN}:${name}` };
+  return { agent: `${PLUGIN}:${name}`, model };
+}
+
+/** `strongAgentChoice` as text for the model. */
+export function strongAgent(name: "reviewer" | "fixer" | "plan-check", env: Env): string {
+  const { agent, model } = strongAgentChoice(name, env);
+  return model ? `\`${agent}\` with \`model: "${model}"\`` : `\`${agent}\``;
 }
 
 /** `VERDICT: OK|FIX` from a checker's final answer; the last one wins. */

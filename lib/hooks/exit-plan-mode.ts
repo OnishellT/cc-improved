@@ -2,10 +2,10 @@
 // ticket evidence, sends unsettled decisions back to the user and asks once per task for the strong-model plan check;
 // PostToolUse marks the approved task as implementing.
 //
-// Plan check, option B (implemented here): the first ExitPlanMode that passes the static checks is denied with
-// "launch cc-improved:plan-check with this brief and apply its verdict"; `recordPlanCheckVerdict` (to be called from
-// SubagentStop) stores the agent's verdict. Option A (an `agent` hook with a strong model on PreToolUse(ExitPlanMode)
-// in hooks/hooks.json, spike 0.2) is left to the integration issue: it lives in hooks/hooks.json, not in lib/.
+// Plan check, option B (active): the first ExitPlanMode that passes the static checks is denied with "launch
+// cc-improved:plan-check in the foreground with this brief and apply its verdict"; `recordPlanCheckVerdict` (called
+// from SubagentStop) stores the agent's verdict. Option A (an `agent` hook with a strong model on
+// PreToolUse(ExitPlanMode), spike 0.2) is documented in docs/plan-check-option-a.md and not enabled.
 //
 // Hook payloads (spike 0.1): PreToolUse carries `tool_input.plan` and `tool_input.planFilePath`; PostToolUse carries an
 // empty `tool_input`, the approved plan in `tool_response.plan` and its path in `tool_response.filePath`. Claude Code
@@ -18,6 +18,7 @@ import { manifestPath, pluginDataDir, sessionStatePath, type Env } from "../path
 import { parsePlan } from "../plan.ts";
 import type { Decision, Manifest, Plan, PreToolUseOutput, SubagentStopInput, Task } from "../types.ts";
 import type { HookContext, HookModule } from "./dispatch.ts";
+import { strongAgentChoice } from "./gate.ts";
 
 const TOOL = "ExitPlanMode";
 /** Plan-check requests per task: one strong-model read, never a loop. */
@@ -179,13 +180,17 @@ export async function recordPlanCheckVerdict(input: SubagentStopInput, ctx: Hook
   return verdict;
 }
 
-function planCheckRequest(brief: string): string {
+function planCheckRequest(brief: string, env: Env): string {
+  // Subagents run in the background by default (spike 0.5): without the verdict in hand, the orchestrator would call
+  // ExitPlanMode again before the check ends and the check would be wasted.
+  const { agent, model } = strongAgentChoice("plan-check", env);
+  const call = `subagent_type "${agent}"${model ? `, model "${model}"` : ""}, run_in_background: false`;
   return [
     `${header} One strong-model plan check is required before the user reviews it (it runs once per task).`,
-    'Launch the cc-improved:plan-check agent with the Agent tool (subagent_type "cc-improved:plan-check") and pass it the brief below, verbatim, as its prompt.',
+    `Launch the ${agent} agent with the Agent tool in the foreground (${call}) and pass it the brief below, verbatim, as its prompt. Wait for its answer.`,
     "When it answers: on VERDICT: FIX, apply each numbered fix to the plan file, or add a line to the plan saying why a fix does not apply; on VERDICT: OK, change nothing. Then call ExitPlanMode again; it will not ask for the check a second time.",
     "",
-    "----- BRIEF FOR cc-improved:plan-check -----",
+    `----- BRIEF FOR ${agent} -----`,
     brief,
     "----- END OF BRIEF -----",
   ].join("\n");
@@ -230,7 +235,7 @@ export default {
     if (manifest.review?.plan === false) return;
     if (state.planChecks < MAX_PLAN_CHECKS) {
       await ctx.session.save({ planChecks: state.planChecks + 1 });
-      return deny(planCheckRequest(buildPlanBrief(task, plan, evidence, await siblings(ctx.root, plan))));
+      return deny(planCheckRequest(buildPlanBrief(task, plan, evidence, await siblings(ctx.root, plan)), ctx.env));
     }
     const verdict = await readPlanCheckVerdict(input.session_id, ctx.env);
     return { systemMessage: verdictNotice(verdict?.taskId === task.id ? verdict : undefined), hookSpecificOutput: { hookEventName: "PreToolUse" } };
