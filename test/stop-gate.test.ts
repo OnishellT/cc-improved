@@ -238,7 +238,7 @@ test("low-risk diff: no review is paid, the summary says so, and an unchanged tr
   await pass(l);
   const out = await run(l, await stop());
   assert.equal(out?.decision, undefined);
-  assert.match(out!.systemMessage!, /revisión omitida \(bajo riesgo/);
+  assert.match(out!.systemMessage!, /revisión omitida \(sin riesgo/);
   assert.equal((await state(l)).reviews, 1);
   assert.equal(await runCount(l), 1);
 
@@ -246,9 +246,29 @@ test("low-risk diff: no review is paid, the summary says so, and an unchanged tr
   assert.equal(await runCount(l), 1);
 });
 
-test("medium diff asks for the cheap reviewer; a risk trigger asks for the strong one", async () => {
+const mediumDiff = `${Array.from({ length: 250 }, (_, i) => `export const v${i} = ${i};`).join("\n")}\nexport const sub = (a, b) => a - b;\n`;
+
+test("medium (low-risk) diff is recorded but not reviewed by default (D-012); review.minLevel low asks for it", async () => {
+  const l = await lab({}, task, { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "opus" });
+  await writeFile(path.join(l.root, "src", "math.js"), mediumDiff);
+  await pass(l);
+  const out = await run(l, await stop());
+  assert.equal(out?.decision, undefined);
+  assert.match(out!.systemMessage!, /revisión omitida \(riesgo bajo registrado.*riesgo low \(.*líneas cambiadas/);
+  const s = await state(l);
+  assert.equal(s.review?.level, "low");
+  assert.equal(s.review?.requested, false);
+
+  const explicit = await lab({ review: { minLevel: "high" } }, task);
+  await writeFile(path.join(explicit.root, "src", "math.js"), mediumDiff);
+  await pass(explicit);
+  assert.equal((await run(explicit, await stop()))?.decision, undefined);
+});
+
+test("review.minLevel low: a medium diff asks for the cheap reviewer; a risk trigger asks for the strong one", async () => {
   const opus = { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "opus" };
-  const medium = await lab({}, task, opus);
+  const manifest = { review: { minLevel: "low" as const } };
+  const medium = await lab(manifest, task, opus);
   await writeFile(path.join(medium.root, "src", "math.js"), `${Array.from({ length: 250 }, (_, i) => `export const v${i} = ${i};`).join("\n")}\nexport const sub = (a, b) => a - b;\n`);
   await pass(medium);
   const low = await run(medium, await stop());
@@ -305,8 +325,8 @@ test("helpers: role, verdict and BLOCKED parsing", () => {
   assert.equal(endsBlocked("BLOCKED: early\nDONE"), false);
 });
 
-test("baseCommit: a committed medium diff still asks for review, names the base in the brief and is recorded", async () => {
-  const l = await lab({}, task, { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "opus" });
+test("baseCommit: a committed medium diff still asks for review (minLevel low), names the base in the brief and is recorded", async () => {
+  const l = await lab({ review: { minLevel: "low" } }, task, { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "opus" });
   const git = (...args: string[]) => execFileSync("git", ["-C", l.root, "-c", "user.name=t", "-c", "user.email=t@t", ...args], { stdio: "pipe" });
   const baseCommit = git("rev-parse", "HEAD").toString().trim();
   await writeFile(path.join(l.root, ".claude", "workflow", "task.json"), JSON.stringify({ ...task, baseCommit }));
@@ -332,6 +352,6 @@ test("no baseCommit and low risk: the decision is recorded and shown in the summ
   await implement(l);
   await pass(l);
   const out = await run(l, await stop());
-  assert.match(out!.systemMessage!, /revisión omitida \(bajo riesgo\); riesgo none/);
+  assert.match(out!.systemMessage!, /revisión omitida \(sin riesgo\); riesgo none/);
   assert.deepEqual((await state(l)).review, { level: "none", reasons: [], requested: false });
 });

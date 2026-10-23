@@ -108,20 +108,32 @@ async function decisionSettled(root: string, plan: Plan, d: Decision): Promise<b
   return rel.startsWith(`${ADR_DIR}/`) && inFiles(plan, rel) && !!d.answer;
 }
 
-// Plan size above which the check is worth its cost, when no risky path is touched (`review.planFiles/...` override).
-const PLAN_FILES = 5;
-const PLAN_INTERFACE = 3;
-const PLAN_DECISIONS = 1;
+// Plan size above which a task is not small and, with `review.plan: true`, the plan is checked (`review.planFiles/...` override).
+const PLAN_FILES = 8;
+const PLAN_INTERFACE = 6;
+const PLAN_DECISIONS = 2;
+
+const over = (n: number, limit: number | undefined, fallback: number) => n > (typeof limit === "number" && Number.isFinite(limit) && limit >= 0 ? limit : fallback);
+
+/** Why a plan is not small enough for the fast route: risk triggers first, then size. Empty: it is small. */
+export function notSmallReasons(plan: Plan, rule: ReviewPolicy | undefined): string[] {
+  const reasons = rule?.always ? ["review.always"] : highRiskReasons(plan.files, rule);
+  if (over(plan.files.length, rule?.planFiles, PLAN_FILES)) reasons.push(`${plan.files.length} files`);
+  if (over(plan.interface.length, rule?.planInterface, PLAN_INTERFACE)) reasons.push(`${plan.interface.length} interface entries`);
+  if (over(plan.decisions.length, rule?.planDecisions, PLAN_DECISIONS)) reasons.push(`${plan.decisions.length} decisions`);
+  return reasons;
+}
 
 /**
- * Whether the plan check is requested: `strong` when the plan touches risk triggers (or `review.always`), `cheap` when
- * it is just big, `undefined` when a small plan does not need it.
+ * Whether the model plan check is requested. Off by default: `strong` only when the plan touches risk triggers (or
+ * `review.always`); `review.plan: true` also gives big plans a `cheap` one; `review.plan: false` never. The
+ * deterministic name and contract checks (`checkPlan`) always run.
  */
 export function planCheckLevel(plan: Plan, rule: ReviewPolicy | undefined): "strong" | "cheap" | undefined {
+  if (rule?.plan === false) return undefined;
   if (rule?.always || highRiskReasons(plan.files, rule).length) return "strong";
-  const over = (n: number, limit: number | undefined, fallback: number) => n > (typeof limit === "number" && Number.isFinite(limit) && limit >= 0 ? limit : fallback);
-  const big = over(plan.files.length, rule?.planFiles, PLAN_FILES) || over(plan.interface.length, rule?.planInterface, PLAN_INTERFACE) || over(plan.decisions.length, rule?.planDecisions, PLAN_DECISIONS);
-  return big ? "cheap" : undefined;
+  if (rule?.plan !== true) return undefined;
+  return notSmallReasons(plan, rule).length ? "cheap" : undefined;
 }
 
 /** Result of the checks every plan goes through before it can be implemented. */

@@ -84,7 +84,7 @@ async function gate(input: StopInput, ctx: HookContext, manifest: Manifest): Pro
     if (risk.review) reviewNote = "revisión pedida y no hecha";
     else {
       s.reviews++;
-      reviewNote = "revisión omitida (bajo riesgo)";
+      reviewNote = risk.level === "none" ? "revisión omitida (sin riesgo)" : "revisión omitida (riesgo bajo registrado; review.minLevel: \"low\" la pediría)";
     }
   }
 

@@ -136,7 +136,6 @@ export default {
 
     await ctx.saveTask(task);
     const state = isNew ? await ctx.session.save({ planChecks: 0 }) : await ctx.session.load();
-    if (manifest.review?.plan === false) return;
     if (state.planChecks < MAX_PLAN_CHECKS) {
       const level = planCheckLevel(plan, manifest.review);
       if (!level) return;

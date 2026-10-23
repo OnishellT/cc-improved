@@ -8,9 +8,9 @@ import * as path from "node:path";
 
 async function validate(args) {
   const { projectDir, taskPath, TASK_PATH } = await import("../lib/paths.ts");
-  const { checkPlan, gateActive, planCheckLevel } = await import("../lib/plan-gate.ts");
+  const { checkPlan, gateActive, notSmallReasons } = await import("../lib/plan-gate.ts");
   const { readMcpText } = await import("../lib/evidence.ts");
-  const { highRiskReasons, withBaseCommit } = await import("../lib/risk.ts");
+  const { withBaseCommit } = await import("../lib/risk.ts");
 
   const opt = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
   // An unsubstituted `${CLAUDE_SESSION_ID}` (or an empty value) must not become the task's owner: hooks would skip
@@ -45,10 +45,9 @@ async function validate(args) {
     return ["REJECTED: fix these problems in the plan file and run the script again (the plan was not saved).", ...checked.errors.map((e) => `- ${e}`)].join("\n");
   }
   const { plan, task } = checked;
-  const big = planCheckLevel(plan, manifest.review);
-  if (big) {
-    const why = manifest.review?.always ? ["review.always"] : highRiskReasons(plan.files, manifest.review);
-    return `REJECTED: this task is not small${why.length ? ` (${why.join("; ")})` : " (too many files, interface entries or decisions)"}. Use plan mode: call EnterPlanMode and follow the full route.`;
+  const why = notSmallReasons(plan, manifest.review);
+  if (why.length) {
+    return `REJECTED: this task is not small (${why.join("; ")}). Use plan mode: call EnterPlanMode and follow the full route.`;
   }
 
   const next = { ...(await withBaseCommit(root, task, current)), status: "implementing", ...(session ? { sessionId: session } : {}) };

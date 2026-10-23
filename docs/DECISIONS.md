@@ -82,3 +82,13 @@ Registro corto de decisiones de proceso del repo. Una entrada por decisión, con
   - El gate de `Stop` guarda `review: { level, reasons, requested }` en el estado de sesión cada vez que evalúa el riesgo (se reinicia al cambiar de tarea) y lo añade al resumen final.
 - **Consecuencia:** un diff commiteado por el implementer ya cuenta. El registro vive en el estado de sesión, no en `task.json`: así no se reescribe la tarea en cada Stop. `/done` no lo muestra todavía.
 
+
+## D-012: defaults baratos: plan-check apagado, revisión solo con riesgo alto, ruta rápida más amplia
+
+- **Contexto:** la eval v2 (`docs/EVAL.md`) mostró la revisión pedida en 10/10 tareas (siempre `-sonnet`) y el chequeo del plan en 6/10, sin que ninguno evitara los fallos de nombres y argumentos; sonnet fue el 63 % del coste de D1v2 ($1.33 de $2.12). Lo que sí atrapa esos fallos es la puerta determinista (nombres, seams, decisiones, contrato), que no cuesta tokens.
+- **Decisión:**
+  - `review.plan` pasa a apagado por defecto: el chequeo del plan con modelo solo se pide si el plan toca riesgo alto (`highRiskReasons`) o `review.always`; `review.plan: true` añade los planes grandes (chequeo barato); `review.plan: false` lo apaga siempre. La puerta determinista corre siempre.
+  - `review.minLevel` (`low|high`, default `high`, aditivo): la revisión con modelo se pide solo con nivel `high` o `review.always`. El nivel `low` se registra (`review` del estado de sesión y resumen del gate) pero no pide revisión salvo `minLevel: "low"`. `always` gana a `never`, como antes.
+  - Ruta rápida de `/task`: pequeña = como mucho 8 archivos, 6 entradas de interfaz y 2 decisiones, sin disparadores de riesgo ni `review.always` (antes 5/3/1, y además exigía que ningún nombre fuera nuevo). Los nombres nuevos ya los frena la puerta determinista, que pregunta a la persona en ambas rutas. `review.planFiles/planInterface/planDecisions` ajustan los umbrales.
+- **Umbrales:** 8 archivos queda por debajo de `highFiles` (15) y cubre tareas de una funcionalidad con sus tests; 6 entradas de interfaz permite un módulo con varias funciones; 2 decisiones permite una decisión resuelta por fuente más una respondida por la persona. El riesgo (dependencias, migraciones, `review.paths`, zonas sensibles) sigue sacando la tarea de la ruta rápida sea cual sea su tamaño.
+- **Consecuencia:** menos llamadas de sonnet por tarea; un diff mediano sin disparadores ya no se revisa con modelo (lo cubren contrato y verify). Quien prefiera el comportamiento anterior pone `review.minLevel: "low"` y `review.plan: true`.
