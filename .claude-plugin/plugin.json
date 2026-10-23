@@ -1,0 +1,8 @@
+{
+  "name": "cc-improved",
+  "version": "0.0.0",
+  "description": "pi-improved para Claude Code: flujo gobernado por código con modelo barato y modelo fuerte donde paga.",
+  "author": {
+    "name": "OnishellT"
+  }
+}

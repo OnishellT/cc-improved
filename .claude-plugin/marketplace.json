@@ -1,0 +1,14 @@
+{
+  "name": "cc-improved",
+  "owner": {
+    "name": "OnishellT"
+  },
+  "plugins": [
+    {
+      "name": "cc-improved",
+      "source": "./",
+      "description": "pi-improved para Claude Code."
+    }
+  ],
+  "description": "Marketplace de un solo plugin: cc-improved."
+}
