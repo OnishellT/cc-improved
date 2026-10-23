@@ -1,0 +1,22 @@
+{
+  "session_id": "d2893885-5771-46e5-8f70-c313a5d39802",
+  "transcript_path": "~/.claude/projects/<project>/d2893885-5771-46e5-8f70-c313a5d39802.jsonl",
+  "cwd": "<work-dir>",
+  "prompt_id": "f38ad79d-ffe6-4803-aa36-cf23f54c139b",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "mcp__lab-tickets__get_ticket_structured",
+  "tool_input": {
+    "id": "LAB-143"
+  },
+  "tool_response": "{\"id\":\"LAB-143\",\"title\":\"Import invoices\"}",
+  "tool_use_id": "toolu_01DP9xFZXY36fY2UP9zbamTC",
+  "duration_ms": 2,
+  "mcp_server": {
+    "name": "lab-tickets",
+    "source": "dynamic"
+  }
+}
