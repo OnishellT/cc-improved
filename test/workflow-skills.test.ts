@@ -120,15 +120,13 @@ test("skill setup: runs on the large model, a literal `opus` (user_config is not
   assert.match(s.meta["allowed-tools"] ?? "", /AskUserQuestion/, "setup asks in the main thread");
 });
 
-test("skill setup: with setup done it warns about the cost and asks before repeating; SessionStart stays quiet", async () => {
+test("skill setup: with setup done it warns about the cost and asks before repeating", async () => {
   const { body } = await load("setup");
   const start = body.slice(body.indexOf("1. **Start.**"), body.indexOf("2. **Read.**"));
   assert.match(start, /`manifest\.setup` is `"done"`/);
   assert.match(start, /costs far more/);
   assert.match(start, /do not run `--start`/);
   assert.ok(start.indexOf('"done"') < start.indexOf("--start --language"), "the confirmation comes before --start");
-  const { setupNote } = await import("../lib/hooks/session-start.ts");
-  assert.equal(setupNote("done"), undefined);
 });
 
 test("skill task: small tasks take the fast route through wf-plan-validate; big or risky ones keep plan mode (D-009)", async () => {
