@@ -9,7 +9,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test \"test/**/*.test.ts\"",
+    "test": "node --experimental-strip-types --test \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "validate": "claude plugin validate ."
   },
