@@ -1,0 +1,39 @@
+{
+  "session_id": "d2893885-5771-46e5-8f70-c313a5d39802",
+  "transcript_path": "~/.claude/projects/<project>/d2893885-5771-46e5-8f70-c313a5d39802.jsonl",
+  "cwd": "<work-dir>",
+  "prompt_id": "f38ad79d-ffe6-4803-aa36-cf23f54c139b",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "mcp__lab-tickets__get_ticket_mixed",
+  "tool_input": {
+    "id": "LAB-147"
+  },
+  "tool_response": [
+    {
+      "type": "text",
+      "text": "TICKET LAB-147: Invoice logo. Marker: MIXED-MARKER-8a6f"
+    },
+    {
+      "type": "image",
+      "source": {
+        "type": "base64",
+        "media_type": "image/png",
+        "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+      }
+    },
+    {
+      "type": "text",
+      "text": "[Image: source: ~/.claude/projects/<project>/d2893885-5771-46e5-8f70-c313a5d39802/tool-results/mcp-lab-tickets-blob-1792746877009-sa26lw.png]"
+    }
+  ],
+  "tool_use_id": "toolu_019oE4HRspMzZZatDSDNJoMW",
+  "duration_ms": 2,
+  "mcp_server": {
+    "name": "lab-tickets",
+    "source": "dynamic"
+  }
+}

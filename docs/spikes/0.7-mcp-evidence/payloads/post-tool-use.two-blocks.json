@@ -1,0 +1,31 @@
+{
+  "session_id": "d2893885-5771-46e5-8f70-c313a5d39802",
+  "transcript_path": "~/.claude/projects/<project>/d2893885-5771-46e5-8f70-c313a5d39802.jsonl",
+  "cwd": "<work-dir>",
+  "prompt_id": "f38ad79d-ffe6-4803-aa36-cf23f54c139b",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "mcp__lab-tickets__get_ticket_two_blocks",
+  "tool_input": {
+    "id": "LAB-146"
+  },
+  "tool_response": [
+    {
+      "type": "text",
+      "text": "TICKET LAB-146: Archive invoices"
+    },
+    {
+      "type": "text",
+      "text": "Acceptance: archiveInvoices(before) moves old invoices. Marker: TWO-BLOCKS-MARKER-4d21"
+    }
+  ],
+  "tool_use_id": "toolu_01LU54qKoSQsjw4SV7yL1AXA",
+  "duration_ms": 3,
+  "mcp_server": {
+    "name": "lab-tickets",
+    "source": "dynamic"
+  }
+}
