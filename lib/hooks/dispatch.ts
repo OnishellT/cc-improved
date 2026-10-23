@@ -72,8 +72,8 @@ export async function dispatch(raw: string, options: DispatchOptions = {}): Prom
 async function run(input: HookInput, route: EventRoute, env: Env, signal: AbortSignal, deadline: number, log: HookContext["log"]): Promise<string> {
   const root = projectDir(env, input.cwd);
   const stored = await readTask(root, log);
-  // Ownership: task.json may carry the `sessionId` of the session that wrote it. Not yet part of `Task` in
-  // lib/types.ts (to be added as `sessionId?: string`); a task without it counts as owned by every session.
+  // Ownership: task.json carries the `sessionId` of the session that wrote it (`Task.sessionId`); a task without it
+  // counts as owned by every session.
   if (stored && typeof stored.sessionId === "string" && stored.sessionId !== input.session_id) return "";
 
   const ctx: HookContext = {

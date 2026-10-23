@@ -4,5 +4,13 @@
   "description": "pi-improved para Claude Code: flujo gobernado por código con modelo barato y modelo fuerte donde paga.",
   "author": {
     "name": "OnishellT"
+  },
+  "userConfig": {
+    "strong_model": {
+      "type": "string",
+      "title": "Modelo fuerte",
+      "description": "Modelo de plan-check, reviewer y fixer: opus (por defecto), sonnet (usa las variantes -sonnet) u otro alias o id, que se pasa como model al lanzar el agente.",
+      "default": "opus"
+    }
   }
 }
