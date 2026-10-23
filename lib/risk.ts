@@ -82,7 +82,8 @@ export interface RiskAssessment {
 }
 
 /**
- * How much review the diff needs. `none`: skip it. `low`: a cheap-model review. `high`: the strong-model review.
+ * How much review the diff needs. `none`: skip it. `low`: recorded, reviewed only when `review.minLevel` is `low`.
+ * `high`: the strong-model review.
  * Cheap: git and regexes, no LLM. Doubt goes up a level, never down.
  */
 export async function assessRisk(root: string, task: Task | undefined, manifest: Manifest): Promise<RiskAssessment> {
@@ -118,5 +119,6 @@ export async function assessRisk(root: string, task: Task | undefined, manifest:
   if (!task?.plan) raise("low", "sin plan");
   // A decision with an `answer` was put to the user; one with only a `source` was already settled in the repo.
   else if (task.plan.decisions.some((d) => d.answer !== undefined)) raise("low", "decisiones nuevas del usuario");
-  return { review: level !== "none", level, reasons };
+  const final = level as RiskLevel; // `raise` assigns it in a closure, which narrowing does not see
+  return { review: rule?.minLevel === "low" ? final !== "none" : final === "high", level: final, reasons };
 }

@@ -82,7 +82,10 @@ test("plan: missing plan or decisions answered by the user", async () => {
   assert.deepEqual((await risk([["a.ts", 2]], noPlan)).reasons, ["sin plan"]);
   assert.deepEqual((await risk([["a.ts", 2]], null)).reasons, ["sin plan"]);
   const asked: Decision = { question: "?", options: [], answer: "x", source: "docs/adr/0001.md" };
-  assert.equal((await risk([["a.ts", 2]], { ...task, plan: { ...plan, decisions: [asked] } })).review, true);
+  const withAsked = await risk([["a.ts", 2]], { ...task, plan: { ...plan, decisions: [asked] } });
+  assert.equal(withAsked.level, "low");
+  assert.equal(withAsked.review, false, "low is recorded, not reviewed, by default");
+  assert.equal((await risk([["a.ts", 2]], { ...task, plan: { ...plan, decisions: [asked] } }, { ...base, review: { minLevel: "low" } })).review, true);
   const settled: Decision = { question: "?", options: [], source: "docs/adr/0001.md" };
   assert.equal((await risk([["a.ts", 2]], { ...task, plan: { ...plan, decisions: [settled] } })).review, false);
 });
@@ -207,4 +210,19 @@ test("an unknown baseCommit falls back to HEAD; withBaseCommit keeps the first b
   const notRepo = fs.mkdtempSync(path.join(os.tmpdir(), "risk-nogit-"));
   assert.deepEqual(await withBaseCommit(notRepo, task), task);
   assert.equal(await gitHead(notRepo), undefined);
+});
+
+test("review.minLevel: low level is recorded but asks for review only with minLevel low (D-012)", async () => {
+  const files: Array<[string, number]> = [["a.ts", 300]];
+  const byDefault = await risk(files, task);
+  assert.deepEqual([byDefault.level, byDefault.review], ["low", false]);
+  assert.match(byDefault.reasons.join(), /líneas cambiadas/);
+  const high = { ...base, review: { minLevel: "high" as const } };
+  assert.equal((await risk(files, task, high)).review, false);
+  const low = { ...base, review: { minLevel: "low" as const } };
+  assert.deepEqual([(await risk(files, task, low)).level, (await risk(files, task, low)).review], ["low", true]);
+  assert.equal((await risk([["a.ts", 2]], task, low)).review, false, "no risk at all never asks");
+  assert.equal((await risk([["package.json", 3]], task)).review, true, "high asks by default");
+  assert.equal((await risk([["a.ts", 300]], task, { ...base, review: { minLevel: "low", never: true } })).review, false);
+  assert.equal((await risk([["a.ts", 2]], task, { ...base, review: { minLevel: "high", always: true, never: true } })).review, true);
 });

@@ -19,15 +19,17 @@ export interface ReviewPolicy {
   always?: boolean;
   /** Never pay for a diff review. */
   never?: boolean;
-  /** One strong-model check of the plan before the user approves it. Default: true. */
+  /** Model check of the plan before the user approves it. Default: off, except when the plan touches risk triggers; true also checks big plans; false never. */
   plan?: boolean;
+  /** Lowest risk level that requests a model review: `high` (default) or `low`. A `low` diff is always recorded. */
+  minLevel?: "low" | "high";
   /** Diff size above which a (cheap-model) review is requested. Defaults: 200 lines, 6 files. */
   maxLines?: number;
   maxFiles?: number;
   /** Diff size above which the strong-model review is requested. Defaults: 600 lines, 15 files. */
   highLines?: number;
   highFiles?: number;
-  /** A plan with more files / interface entries / decisions than this gets the plan check. Defaults: 5, 3, 1. Risky paths always do. */
+  /** A plan with more files / interface entries / decisions than this is not small (no fast route) and, with `plan: true`, gets the plan check. Defaults: 8, 6, 2. Risky paths always do. */
   planFiles?: number;
   planInterface?: number;
   planDecisions?: number;

@@ -138,6 +138,6 @@ test("skill task: small tasks take the fast route through wf-plan-validate; big 
   assert.match(body, /wf-plan-validate\.mjs \.claude\/workflow\/plan\.md/);
   assert.match(body, /ACCEPTED/);
   assert.match(body, /REJECTED/);
-  assert.match(body, /at most 5 files, 3 `interface` entries and 1 decision/);
+  assert.match(body, /at most 8 files, 6 `interface` entries and 2 decisions/);
   assert.match(body, /any doubt means plan mode/);
 });

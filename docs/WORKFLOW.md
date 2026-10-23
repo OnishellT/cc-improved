@@ -42,7 +42,7 @@ El plan es un archivo con una parte humana corta y un único bloque `wf-plan` (J
 Al llamar a `ExitPlanMode`, el hook `PreToolUse` hace dos comprobaciones antes de que la persona vea el plan:
 
 - **Nombres verificados** (`lib/contract.ts`): cada nombre de `interface` debe aparecer literalmente, como palabra, en la fuente que cita. Lo que no aparece cuenta como inventado y se pregunta. Es texto plano: sirve en cualquier lenguaje.
-- **Chequeo del plan** (opción B, `docs/DECISIONS.md` D-004): la primera llamada se deniega y pide lanzar `plan-check` (modelo fuerte, solo lectura), que devuelve `VERDICT: OK` o una lista de arreglos. Una vez por tarea. La opción A queda en `docs/plan-check-option-a.md`, sin activar.
+- **Chequeo del plan** (opción B, `docs/DECISIONS.md` D-004; D-012: apagado por defecto): solo si el plan toca riesgo alto (dependencias, migraciones, `review.paths`, zonas sensibles) o `review.always`/`review.plan: true` (este último también para planes grandes: más de 8 archivos, 6 entradas de interfaz o 2 decisiones); `review.plan: false` lo apaga siempre. La puerta determinista de nombres, seams y decisiones corre siempre. Cuando se pide, la primera llamada se deniega y pide lanzar `plan-check` (modelo fuerte, solo lectura), que devuelve `VERDICT: OK` o una lista de arreglos. Una vez por tarea. La opción A queda en `docs/plan-check-option-a.md`, sin activar.
 
 La persona aprueba el plan una vez y la tarea pasa a `implementing`.
 
@@ -73,7 +73,7 @@ Si el proyecto usa agentlint, `agentlint check --all` es un paso más de `verify
 
 El informe de `verify` vuelve al agente, y la presión sube con cada fallo: el primero, "arréglalo" con el método de diagnóstico; el segundo, se lanza el `fixer` con el modelo fuerte; después, decide la persona (D-009).
 
-Cuando `verify` pasa y el diff es arriesgado (grande, dependencias nuevas, migraciones, rutas sensibles, decisiones nuevas; `lib/risk.ts`), el `reviewer` (modelo fuerte, solo lectura) revisa el diff contra el plan, la interfaz, las ADRs y `CLAUDE.md` siguiendo `blast-radius`. Una ronda: si pide cambios, los hace el modelo barato y los comprueba `verify`, no otra revisión pagada. El reviewer no ejecuta herramientas; recibe en su brief lo que `verify` y las herramientas ya reportaron.
+Cuando `verify` pasa y el diff es de riesgo alto (más de 600 líneas o 15 archivos, dependencias, migraciones, `review.paths`, rutas sensibles) o `review.always` (D-012; `lib/risk.ts`), el `reviewer` (modelo fuerte, solo lectura) revisa el diff contra el plan, la interfaz, las ADRs y `CLAUDE.md` siguiendo `blast-radius`. El riesgo bajo (más de 200 líneas o 6 archivos, sin plan, decisiones nuevas del usuario) se registra en el resumen y no pide revisión salvo `review.minLevel: "low"`; `review.never` la apaga y `review.always` gana a `never`. Una ronda: si pide cambios, los hace el modelo barato y los comprueba `verify`, no otra revisión pagada. El reviewer no ejecuta herramientas; recibe en su brief lo que `verify` y las herramientas ya reportaron.
 
 `/done` cierra la tarea cuando la persona la comprobó: guarda su ficha en `.claude/workflow/tasks.jsonl` y cada 5 tareas propone una retro (`retro` y `maintain-verification-skill`), con las ediciones como opciones que la persona aprueba.
 

@@ -224,12 +224,18 @@ test("wf-plan-validate rejects a seam test file outside files, a missing spec an
 
 test("wf-plan-validate sends big or risky plans to plan mode", async () => {
   const root = await fastProject();
-  const files = ["src/math.js", "src/math.test.js", "a.js", "b.js", "c.js", "d.js"];
-  assert.match((await validate(root, wfPlan({ files }))).stdout, /^REJECTED: this task is not small[\s\S]*plan mode/);
+  const files = ["src/math.js", "src/math.test.js", "a.js", "b.js", "c.js", "d.js", "e.js", "f.js", "g.js"];
+  assert.match((await validate(root, wfPlan({ files }))).stdout, /^REJECTED: this task is not small \(9 files\)[\s\S]*plan mode/);
   const risky = await validate(root, wfPlan({ files: ["src/math.js", "src/math.test.js", "package.json"] }));
   assert.match(risky.stdout, /^REJECTED: this task is not small \(dependencias/);
   assert.match((await validate(await fastProject({ review: { always: true } }), wfPlan())).stdout, /review\.always/);
   await assert.rejects(readFile(taskPath(root), "utf8"));
+});
+
+test("wf-plan-validate accepts up to 8 files on the fast route (D-012) and review.planFiles tightens it", async () => {
+  const files = ["src/math.js", "src/math.test.js", "a.js", "b.js", "c.js", "d.js", "e.js", "f.js"];
+  assert.match((await validate(await fastProject(), wfPlan({ files }))).stdout, /^ACCEPTED/);
+  assert.match((await validate(await fastProject({ review: { planFiles: 3 } }), wfPlan({ files }))).stdout, /^REJECTED: this task is not small \(8 files\)/);
 });
 
 test("wf-plan-validate refuses without a manifest and reports an unreadable file", async () => {
