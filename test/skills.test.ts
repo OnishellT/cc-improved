@@ -4,6 +4,17 @@ import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 const root = new URL("../skills/", import.meta.url).pathname;
+const METHOD = [
+  "grilling",
+  "domain-modeling",
+  "tdd",
+  "diagnosing-bugs",
+  "retro",
+  "blast-radius",
+  "create-verification-skill",
+  "maintain-verification-skill",
+  "technical-writing",
+];
 const dirs = readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory());
 
 function frontmatter(text: string): Record<string, string> {
@@ -17,8 +28,9 @@ function frontmatter(text: string): Record<string, string> {
   return out;
 }
 
-test("hay skills de método", () => {
-  assert.ok(dirs.length >= 9);
+test("las skills de método existen", () => {
+  const names = new Set(dirs.map((d) => d.name));
+  for (const n of METHOD) assert.ok(names.has(n), `missing method skill ${n}`);
 });
 
 for (const d of dirs) {
@@ -29,8 +41,10 @@ for (const d of dirs) {
     assert.equal(fm["name"], d.name);
     assert.match(fm["name"] ?? "", /^[a-z0-9-]{1,64}$/);
     assert.ok((fm["description"] ?? "").length > 20, "description too short");
-    assert.equal(fm["user-invocable"], "false");
-    assert.equal(fm["disable-model-invocation"], undefined);
+    if (METHOD.includes(d.name)) {
+      assert.equal(fm["user-invocable"], "false");
+      assert.equal(fm["disable-model-invocation"], undefined);
+    }
   });
 
   test(`skill ${d.name}: sin comandos de verificación fijos`, () => {
