@@ -1,0 +1,29 @@
+{
+  "session_id": "013e777e-b7ed-4a79-81a3-7385e30ac27a",
+  "transcript_path": "~/.claude/projects/<project>/013e777e-b7ed-4a79-81a3-7385e30ac27a.jsonl",
+  "cwd": "<work-dir>",
+  "prompt_id": "de8b7f48-de54-44ee-81a6-8fcdb6b81e02",
+  "permission_mode": "default",
+  "agent_id": "a69480e16276d8fec",
+  "agent_type": "ticket-reader",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "mcp__lab-tickets__get_ticket",
+  "tool_input": {
+    "id": "LAB-142"
+  },
+  "tool_response": [
+    {
+      "type": "text",
+      "text": "TICKET LAB-142: Export invoices as CSV\nAcceptance: the function exportInvoicesCsv(invoices) returns a string with header \"id,amount,currency\".\nMarker: EVIDENCE-MARKER-7f3a"
+    }
+  ],
+  "tool_use_id": "toolu_014DzwAcremtKupbWAuiPqv1",
+  "duration_ms": 5,
+  "mcp_server": {
+    "name": "lab-tickets",
+    "source": "dynamic"
+  }
+}

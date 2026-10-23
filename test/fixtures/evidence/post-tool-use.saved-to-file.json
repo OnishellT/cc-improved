@@ -1,0 +1,23 @@
+{
+  "session_id": "03c0b94e-ab0b-497e-9261-c980f6998153",
+  "transcript_path": "~/.claude/projects/<project>/03c0b94e-ab0b-497e-9261-c980f6998153.jsonl",
+  "cwd": "<work-dir>",
+  "prompt_id": "476493e5-0552-45c2-b3fb-a573b90caf37",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "mcp__lab-tickets__get_ticket_big",
+  "tool_input": {
+    "id": "LAB-145",
+    "chars": 120000
+  },
+  "tool_response": "Error: result (120,000 characters across 6 lines) exceeds maximum allowed tokens. Output has been saved to ~/.claude/projects/<project>/03c0b94e-ab0b-497e-9261-c980f6998153/tool-results/mcp-lab-tickets-get_ticket_big-1792746946164.txt.\nFormat: Plain text\nSearch within the file for specific content, and use jq if the content is JSON.\nREQUIREMENTS FOR SUMMARIZATION/ANALYSIS/REVIEW:\n- You MUST read the content from the file at ~/.claude/projects/<project>/03c0b94e-ab0b-497e-9261-c980f6998153/tool-results/mcp-lab-tickets-get_ticket_big-1792746946164.txt in sequential chunks until 100% of the content has been read.\n- Note: this file's lines are too long for Read's offset/limit chunking. If a shell tool is available, slice by character range (e.g. python read()[A:B], dd, or cut -c) instead.\n- If you receive truncation warnings when reading the file, reduce the chunk size until you have read 100% of the content without truncation.\n- Before producing ANY summary or analysis, you MUST explicitly describe what portion of the content you have read. ***If you did not read the entire content, you MUST explicitly state this.***\n- If after a few attempts you cannot read the file (file not found, lines too long for Read's offset/limit, no shell access), STOP retrying. Summarize what you were able to read, explicitly state which portion you could not read and why, and proceed.\n",
+  "tool_use_id": "toolu_01Myw1NuTtMj6f6g7tcXhVok",
+  "duration_ms": 209,
+  "mcp_server": {
+    "name": "lab-tickets",
+    "source": "dynamic"
+  }
+}
