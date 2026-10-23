@@ -266,3 +266,63 @@ Recuento: nombres o forma, 4 celdas (todas ciegas); robustez de entradas inváli
 ## Reproducir
 
 Todo está en el scratchpad de la sesión (`eval-v2/`), fuera del repo: `tools/setup.sh <pr>` (setup con opus en un clon del commit base), `tools/run2.sh <D0s|D1v2> <b|h> <pr>` (clona la copia congelada, añade el ticket y corre y corrige), más `host.mjs`, `cost.py`, `grade2.sh` y `shim.py` de v1. Los resultados crudos no se suben.
+
+# Eval v3: D0 y D0s con n=3 por celda (issue #79)
+
+Fecha: 2026-10-23. Coste total gastado: **$0.99** (tope duro: $2; $0.30 por ejecución con `--max-budget-usd`). Sin plugin. Mismas 10 celdas, mismos tickets, pistas y grader (`grade2.sh` y `shim.py`) que v1 y v2.
+
+## Montaje
+
+- Se añaden **2 repeticiones por celda** a D0 (haiku, sin setup) y a D0s (haiku, con el setup de opus de v2 congelado): 40 ejecuciones nuevas. Con la ejecución que ya existía (D0 de v1, D0s de v2) cada celda y brazo tiene n=3.
+- Comando: `env -u CLAUDECODE claude -p --model claude-haiku-5-5 --permission-mode acceptEdits --max-budget-usd 0.30 --output-format json --setting-sources project --strict-mcp-config --settings '{"permissions":{"allow":[...]}}'`, con el mismo prompt que en v1 y v2.
+- Cada ejecución parte de una copia limpia: D0 del commit base (más el ticket), D0s de la copia congelada de v2 (más el ticket). Hasta 6 a la vez; el tiempo de pared no es comparable con v1.
+- Salvedad: la primera ejecución de D0 viene de v1 (con `--max-budget-usd 1` y su propio montaje). Las nuevas repeticiones de D0 usan el montaje de v3, igual al de D0s menos el setup.
+- Proyección de coste tras las 4 primeras ejecuciones: unos $0.02 por ejecución, 40 en total, unos $1; por debajo del tope, sin ajustes.
+
+## Resultados por celda
+
+Tests ocultos que pasan en las tres ejecuciones (v1/v2, r1, r2), con media, mínimo y máximo.
+
+| Celda | Total | D0: ejecuciones | D0: media (mín–máx) | D0s: ejecuciones | D0s: media (mín–máx) |
+|---|---|---|---|---|---|
+| ciega pr58 | 20 | 0, 2, 2 | 1,3 (0–2) | 3, 1, 0 | 1,3 (0–3) |
+| ciega pr53 | 11 | 10, 10, 10 | 10,0 (10–10) | 10, 10, 10 | 10,0 (10–10) |
+| ciega pr198 | 72 | 69, 70, 70 | 69,7 (69–70) | 70, 70, 70 | 70,0 (70–70) |
+| ciega pr84 | 23 | 9, 5, 5 | 6,3 (5–9) | 10, 11, 2 | 7,7 (2–11) |
+| ciega pr223 | 78 | 72, 67, 67 | 68,7 (67–72) | 67, 61, 61 | 63,0 (61–67) |
+| pista pr58 | 20 | 20, 20, 20 | 20,0 (20–20) | 20, 20, 20 | 20,0 (20–20) |
+| pista pr84 | 23 | 14, 14, 14 | 14,0 (14–14) | 14, 15, 14 | 14,3 (14–15) |
+| pista pr223 | 78 | 70, 70, 70 | 70,0 (70–70) | 70, 73, 71 | 71,3 (70–73) |
+| pista pr51 | 85 | 38, 63, 39 | 46,7 (38–63) | 59, 52, 57 | 56,0 (52–59) |
+| pista pr64 | 26 | 20, 24, 22 | 22,0 (20–24) | 20, 24, 24 | 22,7 (20–24) |
+
+## Totales por brazo (las 10 celdas, máximo 436)
+
+Se suma cada ejecución n.º 1, 2 y 3 sobre las 10 celdas, y se da la media y el rango de esas tres sumas.
+
+| Brazo | Sumas por repetición | Media ± rango | Ciega (media, de 204) | Con pista (media, de 232) | Coste de las 20 ejecuciones nuevas | Tiempo medio (nuevas) |
+|---|---|---|---|---|---|---|
+| D0 (sin setup) | 322, 345, 319 | **328,7** (319–345) | 156,0 | 172,7 | $0.50 | 90 s |
+| D0s (con setup) | 343, 337, 329 | **336,3** (329–343) | 152,0 | 184,3 | $0.50 | 89 s |
+
+Coste de las 40 ejecuciones nuevas: $0.99. El coste del setup ($4.94 por los 7 setups) no cambia respecto a v2.
+
+## Conclusión
+
+**El setup no mejora la calidad más allá del ruido.** D0s suma 7,7 tests más de media (336,3 contra 328,7, un 2 % del total), pero los rangos se solapan por completo (329–343 contra 319–345) y la variación entre repeticiones de un mismo brazo (hasta 26 tests en D0) es mayor que esa diferencia. Con n=3 no hay base para afirmar ningún efecto.
+
+- La ventaja de v2 (343 contra 322) no se sostiene: con más repeticiones, D0 sube a 345 en una y D0s baja a 329 en otra.
+- Ciega: el setup no ayuda; D0s queda por debajo en media (152,0 contra 156,0), sobre todo por pr223 (63,0 contra 68,7). Es una diferencia dentro del ruido, no un daño demostrado.
+- Con pista: D0s queda por encima (184,3 contra 172,7), pero casi todo viene de una celda, pista pr51 (56,0 contra 46,7), donde D0 oscila de 38 a 63 entre repeticiones. Sin pr51 las dos medias son prácticamente iguales (más o menos 1 test por celda). Es la única celda con una señal sugerente y con n=3 no se puede separar del ruido.
+- En 8 de las 10 celdas la diferencia de medias entre brazos es de 1,3 tests o menos.
+- El coste de ejecución es idéntico ($0.025 por ejecución) y el setup añade unos $0.49 por tarea (o $0.25 con 20 tareas por proyecto). Con esta evidencia no se justifica el gasto por la calidad; si se quiere defender el setup habría que hacerlo por otra razón (convenciones del repo, no por tests ocultos) o medirlo con más repeticiones y más repos.
+
+## Fuera de alcance
+
+- Un segundo repo (queda para otra issue).
+- Repetir D1 / D1v2 (con plugin): no se pidió.
+- Más de 3 repeticiones por celda.
+
+## Reproducir
+
+Scratchpad de la sesión (`eval-v3/`), fuera del repo: `tools/run3.sh <D0|D0s> <b|h> <pr> <rep>` (copia limpia, ejecuta y corrige con `grade2.sh`), `tools/agg.py` (tabla), reutilizando `data/`, `src-repo/` y `setup/` (copias congeladas) de `eval-v2/`. Los resultados crudos no se suben.
