@@ -9,6 +9,10 @@
 set -euo pipefail
 
 WORK="${1:?usage: $0 <empty-work-dir>}"
+if [ -e "$WORK" ] && [ -n "$(ls -A "$WORK" 2>/dev/null)" ]; then
+  echo "error: work dir '$WORK' is not empty; pass an empty or new folder" >&2
+  exit 2
+fi
 mkdir -p "$WORK"
 WORK="$(cd "$WORK" && pwd)"
 PLUGIN="$WORK/plugin"
@@ -90,23 +94,32 @@ settings_for() { # $1 = value or "none"
 }
 run_claude() { # $1 = run name, $2 = value|none, $3 = prompt
   local name="$1" value="$2" prompt="$3"
+  local status=0
   rm -f "$WORK/$name.probe.jsonl"
+  # Agent errors (model_not_found, failed hooks) are expected and stay non-fatal;
+  # the exit status is recorded so report() can flag a timeout or a crash.
   (cd "$PROJ" && timeout 300 env -u CLAUDECODE PROBE_OUT="$WORK/$name.probe.jsonl" \
     claude -p --model haiku --plugin-dir "$PLUGIN" --settings "$(settings_for "$value")" \
       --output-format stream-json --verbose --max-turns 6 --debug-file "$WORK/$name.debug.log" \
-      "$prompt" < /dev/null > "$WORK/$name.stream.jsonl" 2> "$WORK/$name.err") || true
+      "$prompt" < /dev/null > "$WORK/$name.stream.jsonl" 2> "$WORK/$name.err") || status=$?
+  echo "$status" > "$WORK/$name.exit"
 }
 report() { # $1 = run name -> evidence/<name>.txt
-  local name="$1" s="$WORK/$1.stream.jsonl" sid dir
-  sid="$(jq -r 'select(.type=="system" and .subtype=="init") | .session_id' "$s" | head -1)"
+  local name="$1" s="$WORK/$1.stream.jsonl" sid dir status complete=yes
+  status="$(cat "$WORK/$name.exit" 2>/dev/null || echo missing)"
+  sid="$(jq -r 'select(.type=="system" and .subtype=="init") | .session_id' "$s" 2>/dev/null | head -1)"
+  jq -e -s 'any(.[]; .type=="result")' "$s" > /dev/null 2>&1 || complete=no
+  [ "$status" = 0 ] || complete=no
   {
-    echo "## $name (session $sid)"
+    echo "## $name (session ${sid:-unknown})"
+    echo "# claude exit status: $status$([ "$status" = 124 ] && echo ' (timeout)')"
+    [ "$complete" = yes ] || echo "# INCOMPLETE RUN: result missing or non-zero exit; do not use this run as evidence"
     echo "# stderr"; cat "$WORK/$name.err"
     echo "# Agent tool calls"; jq -c 'select(.type=="assistant") | .message.content[] | select(.type=="tool_use" and .name=="Agent") | .input' "$s"
     echo "# task notifications"; jq -c 'select(.type=="system" and .subtype=="task_notification") | {task_id, status, summary}' "$s"
     echo "# subagent transcripts (model per assistant message)"
     for dir in "$CONFIG_HOME"/projects/*/"$sid"/subagents; do
-      [ -d "$dir" ] || continue
+      [ -n "$sid" ] && [ -d "$dir" ] || continue
       for f in "$dir"/*.jsonl; do
         printf '%s ' "$(jq -r .agentType "${f%.jsonl}.meta.json")"
         jq -c 'select(.type=="assistant") | {model: .message.model, text: [.message.content[]? | .text? | select(.)]}' "$f"
@@ -114,7 +127,12 @@ report() { # $1 = run name -> evidence/<name>.txt
     done
     echo "# hook errors (debug log)"; grep -E 'Hook failed to run' "$WORK/$name.debug.log" | cut -c1-300 || true
     echo "# plugin hook probe"; cat "$WORK/$name.probe.jsonl" 2>/dev/null || echo "(no probe output)"
-    echo "# final result"; jq -c 'select(.type=="result") | {total_cost_usd, modelUsage: (.modelUsage | map_values(.costUSD)), result}' "$s" | tail -1
+    echo "# final result"
+    if [ "$complete" = yes ] || jq -e -s 'any(.[]; .type=="result")' "$s" > /dev/null 2>&1; then
+      jq -c 'select(.type=="result") | {total_cost_usd, modelUsage: (.modelUsage | map_values(.costUSD)), result}' "$s" | tail -1
+    else
+      echo "(result missing: incomplete run)"
+    fi
   } > "$EV/$name.txt"
   cat "$EV/$name.txt"; echo
 }
