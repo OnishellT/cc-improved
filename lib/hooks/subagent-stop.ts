@@ -55,7 +55,7 @@ async function implementerGate(input: SubagentStopInput, ctx: HookContext, name:
       if (gate.contractBlocks >= MAX_CONTRACT_BLOCKS) return release("el contrato de interfaz sigue sin cumplirse");
       gate.contractBlocks++;
       await store(ctx, s);
-      return block(`${formatContract(problems)}\n\nExpose exactly these names in these files, as the plan's interface says, then stop again. A gate checks this every time you stop.`);
+      return block(`${formatContract(problems)}\n\nExpose exactly these names in these files, as the plan says, then stop again. The gate checks this every time.`);
     }
   }
 
@@ -81,8 +81,8 @@ async function implementerGate(input: SubagentStopInput, ctx: HookContext, name:
       "Fix the cause of this failure.",
       DIAGNOSE_METHOD,
       "",
-      "Before you stop, run the verification commands yourself. If they still fail, end your answer with `FAILED: <what still fails, the cause as far as you got, and what you tried>` instead of DONE: the gate will let you out and " +
-        `${next}. A gate runs them every time you stop.`,
+      "Run the verification commands yourself before you stop. If they still fail, end with `FAILED: <what fails, the cause so far, what you tried>` instead of DONE: the gate lets you out and " +
+        `${next}. It runs them every time you stop.`,
     ].join("\n"),
   );
 }

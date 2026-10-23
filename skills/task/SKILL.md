@@ -18,32 +18,32 @@ Reuse their decisions and look at the files they touched. Speak Spanish to the u
 
 ## 1. Before planning
 
-1. If the request is empty, tell the user: "Uso: `/task <TICKET-123 | descripción | ruta/spec.md>`". Stop.
-2. Read `.claude/workflow.json` (the manifest). If it is missing or `setup` is not `"done"`, tell the user to run `/setup` first and stop. Keep its `verify` list, its `connectors` and its `tools`: you need them below.
+1. Empty request: tell the user "Uso: `/task <TICKET-123 | descripción | ruta/spec.md>`" and stop.
+2. Read `.claude/workflow.json` (the manifest). If it is missing or `setup` is not `"done"`, tell the user to run `/setup` and stop. Keep its `verify` list, its `connectors` and its `tools`.
 3. Read `.claude/workflow/task.json` if it exists.
-   - If the request is exactly `cancel`: delete that file (`rm -f .claude/workflow/task.json`), tell the user the task was cancelled and stop.
-   - If its `status` is `planning` or `implementing`, ask with AskUserQuestion: continue that task (recommended), replace it, or stop. To replace, delete the file and go on. To continue an `implementing` task, skip to section 5 with the plan stored in the file.
-4. Split the request: a ticket key (like `PAY-142`), spec files (paths of existing files named in the request) and the free-text description.
+   - Request `cancel`: `rm -f .claude/workflow/task.json`, say the task was cancelled, stop.
+   - `status` is `planning` or `implementing`: ask with AskUserQuestion: continue (recommended), replace, or stop. Replace: delete the file and go on. Continue an `implementing` task: go to section 5 with the stored plan.
+4. Split the request into a ticket key (like `PAY-142`), spec files (existing paths named in it) and the free text.
 
 ## 2. Choose the route
 
 The task is **small** only if all of these hold; any doubt means plan mode.
 
-- The plan will list at most 8 files, 6 `interface` entries and 2 decisions (the manifest's `review.planFiles`, `review.planInterface` and `review.planDecisions` override these).
-- No risk trigger: no dependency manifest or lockfile, no migration or schema, no auth, payments, billing, security, crypto or infra path, nothing under the manifest's `review.paths`, and `review.always` is not set.
+- The plan lists at most 8 files, 6 `interface` entries and 2 decisions (the manifest's `review.planFiles`, `review.planInterface` and `review.planDecisions` override these).
+- No risk trigger: no dependency manifest or lockfile, migration or schema, auth, payments, billing, security, crypto or infra path, nothing under the manifest's `review.paths`, and `review.always` is not set.
 
-Small: **fast route**, no plan mode and no approval dialog; you only read until the plan is written. Otherwise: **plan mode**: call EnterPlanMode now, before reading anything; until the user approves you only read, and the only file you write is the plan file.
+Small: **fast route**: no plan mode, no approval dialog; you only read until the plan is written. Otherwise plan mode: call EnterPlanMode now, before reading anything. Until the user approves you only read, and the only file you write is the plan file.
 
 ## 3. Read, in this order
 
-1. **Ticket.** If there is a ticket key and the manifest lists a connector, its tools are `mcp__<server>__<tool>` (deferred: load them with ToolSearch). Read the ticket in full, acceptance criteria included. Read only: never comment on, transition or edit a ticket. Without a connector, work from the request and say so in the plan. What you read through MCP is the evidence the plan gate checks names against.
-2. **Specs.** Read every spec file named in the request in full.
-3. **Project docs.** `CLAUDE.md`, `GLOSSARY.md` if present, the project skills in `.claude/skills/` that relate to the task, and the ADRs in `docs/adr/` that relate to it. Always read the **Tools** section of `.claude/skills/verify-app/SKILL.md`: the project's verification tools (one per manifest `tools` entry), with their exact commands, when to use each and what their output means. Pick the ones that can prove this task works.
-4. **Code.** The files you will touch and the code around them, including the files next to them: their names, exports and argument shapes are the convention to follow.
+1. **Ticket.** With a ticket key and a manifest connector, its tools are `mcp__<server>__<tool>` (deferred: load them with ToolSearch). Read the ticket in full, acceptance criteria included, read only: never comment on, transition or edit it. Without a connector, work from the request and say so in the plan. What you read through MCP is the evidence the plan gate checks names against.
+2. **Specs** named in the request, in full.
+3. **Project docs.** `CLAUDE.md`, `GLOSSARY.md` if present, the related project skills in `.claude/skills/` and ADRs in `docs/adr/`. Always read the **Tools** section of `.claude/skills/verify-app/SKILL.md` (one tool per manifest `tools` entry, with exact command, when to use it and what its output means) and pick the tools that can prove this task works.
+4. **Code.** The files you will touch and their neighbours: their names, exports and argument shapes are the convention.
 
 ## 4. Write the plan
 
-The plan file (the plan mode file, or `.claude/workflow/plan.md` on the fast route) has a short human part (context, approach in numbered steps, risks) and exactly one `wf-plan` block with strict JSON (double quotes, no comments, no trailing commas). Template, to be replaced with the real task:
+The plan file (the plan mode file, or `.claude/workflow/plan.md` on the fast route) has a short human part (context, numbered approach, risks) and exactly one `wf-plan` block of strict JSON (double quotes, no comments, no trailing commas). Template, to replace with the real task:
 
 ```wf-plan
 {
@@ -78,23 +78,21 @@ The plan file (the plan mode file, or `.claude/workflow/plan.md` on the fast rou
 }
 ```
 
-Rules for the block:
-
-- `files`: every repo-relative file the task creates or changes, test files and new ADRs included. An entry ending in `/` covers a directory. Editing anything else later needs the user's permission.
-- `ticket`: the ticket key; omit the field when there is none. `spec`: the spec files you read; `[]` when none.
-- `interface` pins the file and export names (and signatures) the tests will import. Derive them from the ticket, the specs or existing code and cite that in `source` (the ticket key, a spec path or an existing file path). The gate checks that every export name appears literally, as a word, in the cited evidence, and that the words of a new file's name appear there too. A name that is not there counts as invented and the plan is denied. If nobody gives a name, propose names with AskUserQuestion (recommended first), and record the answer as a decision.
-- New files: name them like their siblings in the same directory (same casing and separators) after the noun the ticket uses; one module per ticket noun, not a new catch-all file. Signatures: copy the argument shape the ticket or existing callers use (an object with named fields stays an object, same units and types). Reuse existing helpers (validators, parsers, types) instead of adding parallel ones.
-- `seams` are the test attachment points, chosen per the tdd skill: each has a test file (listed in `files`), what it catches and what it misses. At least one. Every acceptance criterion of the ticket, the invalid-input ones included, must be covered by a seam.
-- `decisions`: only real choices the code and docs do not settle, each with 2-4 `options`, recommended first. When an ADR, spec, the ticket or an existing file settles one, set `source` to its path (`path#section` allowed). Otherwise ask the user with AskUserQuestion before calling ExitPlanMode, put the answer in `answer`, set `source` to the ADR you will add (`docs/adr/<next number>-<slug>.md`) and list that ADR in `files`: plan mode cannot write it now, so the implementer writes it with the question, the options and the answer.
+- `files`: every file the task creates or changes, tests and new ADRs included; `ticket`: the key, omitted when none; `spec`: the specs you read, `[]` when none.
+- `interface` names must come from the ticket, a spec or existing code (cite it in `source`); an invented name is denied.
+- `seams`: at least one, each with a test file listed in `files`; every acceptance criterion needs one.
+- `decisions`: only real choices the code and docs do not settle; ask the user with AskUserQuestion when nothing settles one.
 - Verification commands never go in the plan: they come from the manifest.
+
+For new files, missing names, signatures or decisions that need an ADR, read [`references/plan-rules.md`](references/plan-rules.md) first.
 
 ## 5. Approval and implementation
 
 1. Get the plan accepted.
-   - **Plan mode:** call ExitPlanMode. A hook validates the `wf-plan` block. If it denies the call, read the reason, fix the plan file and call ExitPlanMode again. If the reason asks you to ask the user something or to run a check, do exactly that first. The user approves in the native dialog.
-   - **Fast route:** write the plan to `.claude/workflow/plan.md` and run `node --experimental-strip-types ${CLAUDE_PLUGIN_ROOT}/bin/wf-plan-validate.mjs .claude/workflow/plan.md --session ${CLAUDE_SESSION_ID} --data "${CLAUDE_PLUGIN_DATA}"`. It applies the same name, seam and decision checks as the hook and, on `ACCEPTED`, stores the task as implementing. On `REJECTED`, fix the file and run it again; if it says the task is not small, switch to plan mode. Do not tell the user the plan was approved: tell them the task is small and what you will do.
-2. Do not write code yourself in this session: the implementer does.
-3. Launch the implementer with the Agent tool: `subagent_type: "cc-improved:implementer"`, `run_in_background: false` (subagents run in the background by default, and the gate needs this one in the foreground). Its prompt is the brief below and nothing else: no exploration notes, no ticket dump, no conversation. Leave out any line that has nothing to put in it.
+   - **Plan mode:** call ExitPlanMode. A hook validates the `wf-plan` block. If it denies the call, read the reason, fix the plan file and call it again; if the reason asks you to ask the user or run a check, do that first. The user approves in the native dialog.
+   - **Fast route:** write `.claude/workflow/plan.md` and run `node --experimental-strip-types ${CLAUDE_PLUGIN_ROOT}/bin/wf-plan-validate.mjs .claude/workflow/plan.md --session ${CLAUDE_SESSION_ID} --data "${CLAUDE_PLUGIN_DATA}"`. It runs the hook's checks and, on `ACCEPTED`, stores the task as implementing. On `REJECTED`, fix the file and run it again; if it says the task is not small, switch to plan mode. Do not tell the user the plan was approved: say the task is small and what you will do.
+2. Do not write code in this session: the implementer does.
+3. Launch the implementer with the Agent tool: `subagent_type: "cc-improved:implementer"`, `run_in_background: false` (the gate needs it in the foreground). Its prompt is the brief below and nothing else: no exploration notes, no ticket dump, no conversation. Leave out any line with nothing to put in it.
 
    ```
    Plan:
@@ -113,10 +111,6 @@ Rules for the block:
 
    The agents read no skill on their own: copy each relevant tool's command verbatim from the verify-app skill. With no `tools` in the manifest, omit the Tools section.
 
-4. Read the last line of its answer:
-   - `DONE`: tell the user what changed and that verification passed, and ask them to check it and close the task with `/done`. Do not run `/done` yourself.
-   - `BLOCKED: <question>`: ask the user with AskUserQuestion (the options from that line, recommended first), then launch the implementer again with the same brief plus `Answer from the user: <answer>`.
-   - `FAILED: <report>`: launch the fixer the same way (foreground, the same brief plus the failure report). If the fixer also ends with `FAILED` or `BLOCKED`, tell the user what fails and ask how to go on.
-5. When a hook asks for a review, launch the reviewer it names in the foreground with the brief it describes, plus the tools section of the implementer brief and what the implementer reported from those tools. On `VERDICT: FIX`, launch the implementer again with the same brief plus the numbered findings.
+4. Read the last line of its answer. `DONE`: tell the user what changed and that verification passed, and ask them to check it and close with `/done`; do not run `/done` yourself. `BLOCKED` or `FAILED`, or a hook asking for a review: read [`references/after-implementer.md`](references/after-implementer.md).
 
-`cc-improved:plan-check` and `cc-improved:reviewer` run on their `-sonnet` variant by default; the hook that asks for them names the exact agent, so launch that one. The default variant (the configured strong model) is named only when the risk is high or `review.always` is set. The reviewer is requested only for high risk, `review.always` or `review.minLevel: "low"`; the plan check only when the plan touches risk triggers or the manifest sets `review.plan: true`. Names the plan invents are still caught by the plan gate, which asks the user, on either route. `cc-improved:fixer` follows the configured strong model. The configured strong model is `${user_config.strong_model}`. If that value still starts with `${`, the option is not set: the strong variant is the default one, without `model`. If it is `sonnet`, every variant is `-sonnet` (for example `cc-improved:reviewer-sonnet`). If it is `opus`, the strong variant is the default one. Any other value: the strong variant is the default one and you pass that value as `model`. Never pick a variant on your own: use what the hook says.
+Agent variants: the hook that asks for `cc-improved:plan-check` or `cc-improved:reviewer` names the exact agent (`-sonnet` by default; the default variant only for high risk or `review.always`). Launch exactly that one and never pick a variant yourself. `cc-improved:fixer` follows the configured strong model, `${user_config.strong_model}`: if it still starts with `${`, the option is not set and the strong variant is the default one, without `model`. `sonnet`: every variant is `-sonnet` (for example `cc-improved:reviewer-sonnet`). `opus`: the strong variant is the default one. Any other value: the default one with that value as `model`.

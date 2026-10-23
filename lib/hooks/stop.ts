@@ -48,7 +48,7 @@ async function gate(input: StopInput, ctx: HookContext, manifest: Manifest): Pro
   if (task.plan) {
     const problems = await checkContract(ctx.root, task.plan);
     if (problems.length) {
-      return blockWith("contract", `${formatContract(problems)}\n\nExpose exactly these names in these files, as the plan's interface says (relaunch the implementer with this report if it wrote them), then finish.`);
+      return blockWith("contract", `${formatContract(problems)}\n\nExpose exactly these names in these files (relaunch the implementer with this report if it wrote them), then finish.`);
     }
   }
 
@@ -76,8 +76,8 @@ async function gate(input: StopInput, ctx: HookContext, manifest: Manifest): Pro
         "review",
         [
           `The diff needs a review before this task can finish (risk ${risk.level}: ${risk.reasons.join("; ")}).`,
-          `Launch the ${strongAgent("reviewer", ctx.env, { strong: risk.level === "high" })} agent in the foreground (run_in_background: false) with the review brief: the plan (files, interface, seams, decisions), the full diff from \`git diff ${await diffBase(ctx.root, task)}\` and every new file in full.`,
-          "Then fix each blocking finding it lists after `VERDICT: FIX` and finish. There is one review round: your fixes are checked by verify, not by a second review.",
+          `Launch the ${strongAgent("reviewer", ctx.env, { strong: risk.level === "high" })} agent in the foreground (run_in_background: false) with the review brief: the plan, the full diff from \`git diff ${await diffBase(ctx.root, task)}\` and every new file in full.`,
+          "Then fix each blocking finding after `VERDICT: FIX` and finish. One review round only: verify checks your fixes.",
         ].join("\n"),
       );
     }
@@ -121,11 +121,11 @@ async function verifyFailed(
     case "fix":
       return policy
         ? blockWith("policy", `${report}\n\n${POLICY_NOTE}`)
-        : blockWith("fix", `${report}\n\nVerification fails. Fix the cause (yourself, or by relaunching the implementer with this report), then finish.\n${DIAGNOSE_METHOD}`);
+        : blockWith("fix", `${report}\n\nFix the cause (yourself, or relaunch the implementer with this report), then finish.\n${DIAGNOSE_METHOD}`);
     case "escalate":
       return blockWith(
         "escalate",
-        `${report}\n\nVerification still fails after the implementer's attempts. Launch the ${strongAgent("fixer", ctx.env)} agent in the foreground (run_in_background: false) with the implementer's brief (plan, interface, seams, ADRs, verification commands) plus this report and what was tried. Do not fix it yourself. Then finish.`,
+        `${report}\n\nVerification still fails. Launch the ${strongAgent("fixer", ctx.env)} agent in the foreground (run_in_background: false) with the implementer's brief plus this report and what was tried. Do not fix it yourself. Then finish.`,
       );
     case "person":
       return letOut(

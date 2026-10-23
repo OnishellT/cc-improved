@@ -151,11 +151,11 @@ export const reviewRecord = (risk: { review: boolean; level: RiskLevel; reasons:
 
 export const DIAGNOSE_METHOD = [
   "Diagnose before changing more code:",
-  "1. Reproduce: run the failing command above and read the whole error.",
-  "2. Isolate: find the smallest input, test or file that still fails.",
-  "3. Hypothesis: write down one cause that explains every symptom, and check it by reading the code or adding a temporary print.",
-  "4. Fix the cause, not the symptom. Do not weaken, skip or delete tests to make them pass.",
+  "1. Reproduce: run the failing command and read the whole error.",
+  "2. Isolate: the smallest input, test or file that still fails.",
+  "3. Hypothesis: one cause that explains every symptom; check it in the code or with a temporary print.",
+  "4. Fix the cause, not the symptom. Never weaken, skip or delete tests.",
 ].join("\n");
 
 export const POLICY_NOTE =
-  "The failing step is an agentlint rule. Fix the code if the finding is right. If the rule needs an exception, do not work around it: stop and end your answer with `BLOCKED: <the exception you need and why>` so the person decides.";
+  "The failing step is an agentlint rule. Fix the code if the finding is right. If it needs an exception, stop and end with `BLOCKED: <the exception you need and why>`; the person decides.";
