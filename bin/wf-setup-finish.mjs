@@ -1,0 +1,275 @@
+#!/usr/bin/env node
+// Start or finish /setup. Validates what the model wrote, runs verify and writes `.claude/workflow.json`.
+// Run as: node --experimental-strip-types "${CLAUDE_PLUGIN_ROOT}/bin/wf-setup-finish.mjs" [--start] [options]
+//
+//   --start                 mark `setup: "running"` (keeps existing fields); hooks keep pushing until `done`
+//   --pause                 mark `setup: "pending"` (keeps `startedAt`, so the next /setup resumes); pushing stops
+//   --step "<command>"      a verify step, repeatable, in run order (fastest first); default: the manifest's verify
+//   --language <lang>       language of questions and docs
+//   --connector <id[:server]>  enabled connector, repeatable; `server` is its key in `.mcp.json`
+//   --agentlint "<prefix>"  agentlint command prefix when the project enforces agentlint rules
+//   --accept-failing-verify finish even though verify fails (only when the user chose so)
+//
+// Exit 0: done (or started). Exit 1: problems or verify failed; the report says what to fix. Exit 2: bad usage.
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+import { formatVerify, runVerify } from "../lib/verify.ts";
+import { MANIFEST_PATH, TASKS_LOG_PATH, WORKFLOW_DIR, manifestPath, projectDir } from "../lib/paths.ts";
+
+/** CLAUDE.md is loaded into every session: keep it a map, details go to skills and rules. */
+export const CLAUDE_MD_MAX_LINES = 200;
+const SETUP_STATUSES = ["pending", "running", "done", "declined"];
+const SKILL_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const ADR_NAME = /^\d{4}-[a-z0-9][a-z0-9-]*\.md$/;
+/** Lines `.gitignore` needs: local workflow state ignored, the closed-task log committed. */
+const IGNORE_LINES = [`${WORKFLOW_DIR}/*`, `!${TASKS_LOG_PATH}`];
+
+class Usage extends Error {}
+
+function parseArgs(argv) {
+  const opts = { start: false, pause: false, steps: [], connectors: [], acceptFailing: false };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    const value = () => {
+      const v = argv[++i];
+      if (v === undefined) throw new Usage(`${arg} needs a value`);
+      return v;
+    };
+    if (arg === "--start") opts.start = true;
+    else if (arg === "--pause") opts.pause = true;
+    else if (arg === "--step") opts.steps.push(value());
+    else if (arg === "--language") opts.language = value();
+    else if (arg === "--agentlint") opts.agentlint = value();
+    else if (arg === "--connector") {
+      const [id, server] = value().split(":");
+      if (!id) throw new Usage("--connector needs an id");
+      opts.connectors.push(server ? { id, server } : { id });
+    } else if (arg === "--accept-failing-verify") opts.acceptFailing = true;
+    else throw new Usage(`unknown argument ${arg}`);
+  }
+  return opts;
+}
+
+const read = (file) => {
+  try {
+    return fs.readFileSync(file, "utf8");
+  } catch {
+    return undefined;
+  }
+};
+const isDir = (file) => {
+  try {
+    return fs.statSync(file).isDirectory();
+  } catch {
+    return false;
+  }
+};
+const listDir = (dir) => {
+  try {
+    return fs.readdirSync(dir).sort();
+  } catch {
+    return [];
+  }
+};
+
+/** Shape problems of a manifest object; empty when it matches `Manifest` in lib/types.ts. */
+export function manifestProblems(m) {
+  const p = [];
+  if (!m || typeof m !== "object" || Array.isArray(m)) return [`${MANIFEST_PATH} must be a JSON object.`];
+  if (m.version !== 1) p.push(`${MANIFEST_PATH}: "version" must be 1.`);
+  if (!SETUP_STATUSES.includes(m.setup)) p.push(`${MANIFEST_PATH}: "setup" must be one of ${SETUP_STATUSES.join(", ")}.`);
+  if (!Array.isArray(m.verify) || m.verify.some((s) => typeof s !== "string" || !s.trim())) p.push(`${MANIFEST_PATH}: "verify" must be a list of non-empty commands.`);
+  if (!Array.isArray(m.connectors) || m.connectors.some((c) => !c || typeof c.id !== "string" || (c.server !== undefined && typeof c.server !== "string"))) {
+    p.push(`${MANIFEST_PATH}: "connectors" must be a list of {"id", "server"?}.`);
+  }
+  for (const key of ["language", "startedAt", "completedAt", "agentlint"]) if (m[key] !== undefined && typeof m[key] !== "string") p.push(`${MANIFEST_PATH}: "${key}" must be a string.`);
+  if (m.review !== undefined && (typeof m.review !== "object" || Array.isArray(m.review))) p.push(`${MANIFEST_PATH}: "review" must be an object.`);
+  return p;
+}
+
+/** The manifest on disk, or a fresh pending one. Throws when the file exists but is not valid JSON. */
+function loadManifest(root) {
+  const text = read(manifestPath(root));
+  if (text === undefined) return { version: 1, setup: "pending", verify: [], connectors: [] };
+  try {
+    return { verify: [], connectors: [], ...JSON.parse(text) };
+  } catch (err) {
+    throw new Error(`${MANIFEST_PATH} is not valid JSON (${err.message}). Fix or delete it and run again.`);
+  }
+}
+
+function saveManifest(root, manifest) {
+  const file = manifestPath(root);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  // Keys in the order of `Manifest` (lib/types.ts), then anything else the file already had.
+  const order = ["version", "setup", "language", "startedAt", "completedAt", "verify", "review", "connectors", "agentlint"];
+  const sorted = Object.fromEntries([...order.filter((k) => k in manifest).map((k) => [k, manifest[k]]), ...Object.entries(manifest).filter(([k]) => !order.includes(k))]);
+  fs.writeFileSync(tmp, `${JSON.stringify(sorted, null, 2)}\n`);
+  fs.renameSync(tmp, file);
+}
+
+/** Frontmatter keys of a Markdown file (`key: value` lines only), or undefined when there is none. */
+export function frontmatter(text) {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/.exec(text);
+  if (!m) return undefined;
+  const keys = {};
+  let last;
+  for (const line of m[1].split(/\r?\n/)) {
+    const pair = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line);
+    if (pair) keys[(last = pair[1])] = pair[2].trim();
+    else if (last && /^\s+(-\s+)?\S/.test(line)) keys[last] = `${keys[last]} ${line.trim()}`.trim();
+  }
+  return keys;
+}
+
+/** What is missing or malformed in the files /setup writes. Empty means complete. */
+export function checkOutputs(root, manifest) {
+  const p = [];
+  const claude = read(path.join(root, "CLAUDE.md"));
+  if (claude === undefined || !claude.trim()) p.push("CLAUDE.md is missing or empty.");
+  else if (claude.split("\n").length > CLAUDE_MD_MAX_LINES) p.push(`CLAUDE.md has more than ${CLAUDE_MD_MAX_LINES} lines. Move details into .claude/skills/domain-* or .claude/rules/.`);
+
+  const glossary = read(path.join(root, "GLOSSARY.md"));
+  if (glossary === undefined || !glossary.trim()) p.push("GLOSSARY.md is missing or empty.");
+
+  const skillsDir = path.join(root, ".claude/skills");
+  let domain = 0;
+  for (const dir of listDir(skillsDir)) {
+    if (!isDir(path.join(skillsDir, dir))) continue;
+    const where = `.claude/skills/${dir}/SKILL.md`;
+    const text = read(path.join(skillsDir, dir, "SKILL.md"));
+    if (text === undefined) {
+      p.push(`${where} is missing.`);
+      continue;
+    }
+    const fm = frontmatter(text);
+    if (!fm?.name || !fm.description) p.push(`${where} needs frontmatter with "name" and "description".`);
+    else if (!SKILL_NAME.test(fm.name)) p.push(`${where}: name "${fm.name}" must use lowercase letters, digits and hyphens.`);
+    else if (fm.name !== dir) p.push(`${where}: name "${fm.name}" must match its folder "${dir}".`);
+    else if (dir.startsWith("domain-")) domain++;
+  }
+  if (!domain) p.push("No domain skill: write at least one .claude/skills/domain-<area>/SKILL.md.");
+  if (read(path.join(skillsDir, "verify-app", "SKILL.md")) === undefined) p.push(".claude/skills/verify-app/SKILL.md is missing.");
+
+  const adrDir = path.join(root, "docs/adr");
+  if (!isDir(adrDir)) p.push("docs/adr/ is missing. Record at least the decisions the code shows or the user confirmed.");
+  else {
+    const adrs = listDir(adrDir).filter((f) => f.endsWith(".md") && !/^(README|index|template)/i.test(f));
+    if (!adrs.length) p.push("docs/adr/ has no ADR. Write docs/adr/NNNN-<title>.md for each decision the code shows or the user confirmed.");
+    for (const f of adrs) {
+      if (!ADR_NAME.test(f)) p.push(`docs/adr/${f}: name it NNNN-<kebab-title>.md.`);
+      else if (!/^#\s+\S/m.test(read(path.join(adrDir, f)) ?? "")) p.push(`docs/adr/${f} needs a "# " title.`);
+    }
+  }
+
+  const rulesDir = path.join(root, ".claude/rules");
+  for (const f of listDir(rulesDir).filter((f) => f.endsWith(".md"))) {
+    const fm = frontmatter(read(path.join(rulesDir, f)) ?? "");
+    if (!fm?.paths) p.push(`.claude/rules/${f} needs frontmatter with "paths:" (the globs it applies to).`);
+  }
+
+  const withServer = manifest.connectors.filter((c) => c.server);
+  if (withServer.length) {
+    const text = read(path.join(root, ".mcp.json"));
+    let servers;
+    try {
+      servers = text === undefined ? undefined : JSON.parse(text)?.mcpServers;
+    } catch {
+      p.push(".mcp.json is not valid JSON.");
+    }
+    if (text === undefined) p.push(".mcp.json is missing but connectors name MCP servers.");
+    else for (const c of withServer) if (servers?.[c.server] === undefined) p.push(`.mcp.json has no mcpServers.${c.server} for connector ${c.id}.`);
+  }
+
+  if (!manifest.verify.length) p.push("No verify steps. Pass at least one --step that checks the project.");
+  return [...new Set(p)];
+}
+
+/** Adds the workflow lines to `.gitignore` unless the folder is already covered. */
+function ensureIgnored(root) {
+  const file = path.join(root, ".gitignore");
+  const current = read(file) ?? "";
+  const lines = current.split("\n").map((l) => l.trim());
+  if (lines.some((l) => [`${WORKFLOW_DIR}`, `${WORKFLOW_DIR}/`, `/${WORKFLOW_DIR}/`].includes(l))) return false;
+  const missing = IGNORE_LINES.filter((l) => !lines.includes(l));
+  if (!missing.length) return false;
+  fs.writeFileSync(file, `${current}${current && !current.endsWith("\n") ? "\n" : ""}${missing.join("\n")}\n`);
+  return true;
+}
+
+const hasAgentlintConfig = (root) => listDir(path.join(root, ".agentlint")).some((f) => /^config\.[cm]?[jt]s$/.test(f));
+
+export async function main(argv, env = process.env, cwd = process.cwd()) {
+  const out = [];
+  const say = (line) => out.push(line);
+  let code = 0;
+  try {
+    const opts = parseArgs(argv);
+    const root = projectDir(env, cwd);
+    const manifest = loadManifest(root);
+    if (opts.language) manifest.language = opts.language;
+    if (opts.connectors.length) manifest.connectors = opts.connectors;
+    if (opts.agentlint) manifest.agentlint = opts.agentlint;
+    if (opts.steps.length) manifest.verify = opts.steps;
+
+    if (opts.start && opts.pause) throw new Usage("--start and --pause exclude each other");
+    if (opts.start || opts.pause) {
+      manifest.setup = opts.start ? "running" : "pending";
+      if (opts.start) manifest.startedAt ??= new Date().toISOString();
+      const shape = manifestProblems(manifest);
+      if (shape.length) throw new Error(shape.join("\n"));
+      saveManifest(root, manifest);
+      say(opts.start ? `setup: running (${MANIFEST_PATH}). Finish with wf-setup-finish.mjs and the verify steps.` : `setup: pending (paused; ${MANIFEST_PATH} keeps what is done). Stop here.`);
+      return { code, text: out.join("\n") };
+    }
+
+    const problems = manifestProblems({ ...manifest, setup: manifest.setup ?? "pending" });
+    problems.push(...checkOutputs(root, manifest));
+    let verify = manifest.verify;
+    if (manifest.agentlint) {
+      if (!hasAgentlintConfig(root)) problems.push(`agentlint is not configured: run \`${manifest.agentlint} init\` and add the rules the user selected.`);
+      else {
+        const tests = await runVerify([`${manifest.agentlint} rules test`], root);
+        // A config with zero rules is a valid choice; agentlint reports it as "No matching rules".
+        if (!tests.ok && !tests.results.some((r) => /No matching rules/.test(r.output))) problems.push(`agentlint rule fixtures fail:\n${formatVerify(tests)}`);
+      }
+      if (!verify.some((s) => /\bagentlint\b/.test(s))) verify = [...verify, `${manifest.agentlint} check --all`];
+    }
+    if (problems.length) {
+      say("Setup incomplete:");
+      for (const line of problems) say(`- ${line}`);
+      say("\nFix these and run wf-setup-finish.mjs again.");
+      return { code: 1, text: out.join("\n") };
+    }
+
+    const result = await runVerify(verify, root);
+    say(formatVerify(result));
+    manifest.verify = verify;
+    if (!result.ok && !opts.acceptFailing) {
+      // Keep the steps so a resumed setup starts from them; setup stays running.
+      if (manifest.setup !== "done") manifest.setup = "running";
+      saveManifest(root, manifest);
+      say("\nFix the cause (or the verify steps, if they are wrong) and run wf-setup-finish.mjs again.");
+      return { code: 1, text: out.join("\n") };
+    }
+
+    if (ensureIgnored(root)) say(`.gitignore: added ${IGNORE_LINES.join(", ")}`);
+    manifest.setup = "done";
+    manifest.completedAt = new Date().toISOString();
+    saveManifest(root, manifest);
+    say(`\nsetup: done${result.ok ? "" : " (verify still fails: the user accepted it)"}. Wrote ${MANIFEST_PATH}. Stop here.`);
+  } catch (err) {
+    code = err instanceof Usage ? 2 : 1;
+    say(`wf-setup-finish: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  return { code, text: out.join("\n") };
+}
+
+const self = fs.realpathSync(fileURLToPath(import.meta.url));
+if (process.argv[1] && fs.realpathSync(path.resolve(process.argv[1])) === self) {
+  const { code, text } = await main(process.argv.slice(2));
+  await new Promise((resolve) => process.stdout.write(`${text}\n`, resolve));
+  process.exit(code);
+}
