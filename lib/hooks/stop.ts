@@ -3,7 +3,7 @@
 // the fixes it asks for are checked by verify, not by a second review. When everything passes the turn ends with a
 // summary for the person.
 import { checkContract, formatContract } from "../contract.ts";
-import { assessRisk } from "../risk.ts";
+import { assessRisk, diffBase } from "../risk.ts";
 import type { AgentGateState, Manifest, SessionState, StopInput, StopOutput } from "../types.ts";
 import type { HookContext, HookModule } from "./dispatch.ts";
 import {
@@ -14,6 +14,7 @@ import {
   MAX_REVIEWS,
   POLICY_NOTE,
   readManifest,
+  reviewRecord,
   RELEASE_AFTER,
   store,
   strongAgent,
@@ -51,7 +52,7 @@ async function gate(input: StopInput, ctx: HookContext, manifest: Manifest): Pro
     }
   }
 
-  const print = await fingerprint(ctx.root);
+  const print = await fingerprint(ctx.root, task);
   const cached = print !== "" && print === s.verifiedFingerprint;
   if (!cached && manifest.verify.length) {
     const result = await verify(ctx, manifest.verify);
@@ -69,12 +70,13 @@ async function gate(input: StopInput, ctx: HookContext, manifest: Manifest): Pro
     reviewNote = s.reviewVerdict === "FIX" ? "revisión: FIX (hallazgos aplicados, comprobados por verify; sin segunda ronda)" : `revisión: ${s.reviewVerdict ?? "hecha"}`;
   } else {
     const risk = await assessRisk(ctx.root, task, manifest);
+    s.review = reviewRecord(risk);
     if (risk.review && s.lastBlock !== "review") {
       return blockWith(
         "review",
         [
           `The diff needs a review before this task can finish (risk ${risk.level}: ${risk.reasons.join("; ")}).`,
-          `Launch the ${strongAgent("reviewer", ctx.env, { strong: risk.level === "high" })} agent in the foreground (run_in_background: false) with the review brief: the plan (files, interface, seams, decisions), the full diff from \`git diff HEAD\` and every new file in full.`,
+          `Launch the ${strongAgent("reviewer", ctx.env, { strong: risk.level === "high" })} agent in the foreground (run_in_background: false) with the review brief: the plan (files, interface, seams, decisions), the full diff from \`git diff ${await diffBase(ctx.root, task)}\` and every new file in full.`,
           "Then fix each blocking finding it lists after `VERDICT: FIX` and finish. There is one review round: your fixes are checked by verify, not by a second review.",
         ].join("\n"),
       );
@@ -82,7 +84,7 @@ async function gate(input: StopInput, ctx: HookContext, manifest: Manifest): Pro
     if (risk.review) reviewNote = "revisión pedida y no hecha";
     else {
       s.reviews++;
-      reviewNote = `revisión omitida (bajo riesgo${risk.reasons.length ? `: ${risk.reasons.join("; ")}` : ""})`;
+      reviewNote = "revisión omitida (bajo riesgo)";
     }
   }
 
@@ -90,9 +92,10 @@ async function gate(input: StopInput, ctx: HookContext, manifest: Manifest): Pro
   s.lastBlock = undefined;
   await store(ctx, s);
   if (!fresh) return undefined;
+  const level = s.review ? `; riesgo ${s.review.level}${s.review.reasons.length ? ` (${s.review.reasons.join("; ")})` : ""}` : "";
   const verified = manifest.verify.length ? `verify OK (${manifest.verify.length} pasos)` : "sin pasos de verify en el manifest";
   const contract = task.plan?.interface.length ? "contrato de interfaz OK" : "sin contrato de interfaz";
-  return { systemMessage: `cc-improved: "${task.title}": ${contract}; ${verified}; ${reviewNote}. Comprueba el resultado y cierra con /done.` };
+  return { systemMessage: `cc-improved: "${task.title}": ${contract}; ${verified}; ${reviewNote}${level}. Comprueba el resultado y cierra con /done.` };
 }
 
 async function verifyFailed(

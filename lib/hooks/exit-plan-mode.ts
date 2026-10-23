@@ -16,6 +16,7 @@ import { buildPlanBrief, parsePlanVerdict, readMcpText, siblings, type PlanCheck
 import { pluginDataDir, sessionStatePath, type Env } from "../paths.ts";
 import { checkPlan, gateActive, planCheckLevel } from "../plan-gate.ts";
 import { parsePlan } from "../plan.ts";
+import { withBaseCommit } from "../risk.ts";
 import type { PreToolUseOutput, SubagentStopInput, Task } from "../types.ts";
 import type { HookContext, HookModule } from "./dispatch.ts";
 import { strongAgentChoice } from "./gate.ts";
@@ -129,7 +130,9 @@ export default {
     if ("errors" in checked) {
       return deny(checked.stage === "parse" ? [header, ...checked.errors.map((e) => `- ${e}`), retry].join("\n") : [header, "Fix these problems:", ...checked.errors.map((p) => `- ${p}`), retry].join("\n"));
     }
-    const { plan, task, isNew, evidence } = checked;
+    const { plan, evidence, isNew } = checked;
+    // The base commit is fixed when the task enters planning and survives resubmissions of the plan.
+    const task = await withBaseCommit(ctx.root, checked.task, ctx.task);
 
     await ctx.saveTask(task);
     const state = isNew ? await ctx.session.save({ planChecks: 0 }) : await ctx.session.load();
@@ -149,7 +152,8 @@ export default {
     const task = ctx.task;
     if (!task || task.status !== "planning") return;
     const response = (input.tool_response ?? {}) as { plan?: unknown; filePath?: unknown };
-    const next: Task = { ...task, status: "implementing" };
+    // A task planned without git (or before this field existed) gets its base now, as late as it can be.
+    const next: Task = await withBaseCommit(ctx.root, { ...task, status: "implementing" }, task);
     if (typeof response.plan === "string") {
       const parsed = parsePlan(response.plan);
       if ("plan" in parsed) next.plan = parsed.plan;

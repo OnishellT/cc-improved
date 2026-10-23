@@ -10,7 +10,7 @@ async function validate(args) {
   const { projectDir, taskPath, TASK_PATH } = await import("../lib/paths.ts");
   const { checkPlan, gateActive, planCheckLevel } = await import("../lib/plan-gate.ts");
   const { readMcpText } = await import("../lib/evidence.ts");
-  const { highRiskReasons } = await import("../lib/risk.ts");
+  const { highRiskReasons, withBaseCommit } = await import("../lib/risk.ts");
 
   const opt = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
   // An unsubstituted `${CLAUDE_SESSION_ID}` (or an empty value) must not become the task's owner: hooks would skip
@@ -51,7 +51,7 @@ async function validate(args) {
     return `REJECTED: this task is not small${why.length ? ` (${why.join("; ")})` : " (too many files, interface entries or decisions)"}. Use plan mode: call EnterPlanMode and follow the full route.`;
   }
 
-  const next = { ...task, status: "implementing", ...(session ? { sessionId: session } : {}) };
+  const next = { ...(await withBaseCommit(root, task, current)), status: "implementing", ...(session ? { sessionId: session } : {}) };
   const out = taskPath(root);
   await mkdir(path.dirname(out), { recursive: true });
   const tmp = `${out}.${process.pid}.tmp`;

@@ -304,3 +304,34 @@ test("helpers: role, verdict and BLOCKED parsing", () => {
   assert.equal(endsBlocked("text\nBLOCKED: which one?\n"), true);
   assert.equal(endsBlocked("BLOCKED: early\nDONE"), false);
 });
+
+test("baseCommit: a committed medium diff still asks for review, names the base in the brief and is recorded", async () => {
+  const l = await lab({}, task, { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "opus" });
+  const git = (...args: string[]) => execFileSync("git", ["-C", l.root, "-c", "user.name=t", "-c", "user.email=t@t", ...args], { stdio: "pipe" });
+  const baseCommit = git("rev-parse", "HEAD").toString().trim();
+  await writeFile(path.join(l.root, ".claude", "workflow", "task.json"), JSON.stringify({ ...task, baseCommit }));
+  await writeFile(path.join(l.root, "src", "math.js"), `${Array.from({ length: 250 }, (_, i) => `export const v${i} = ${i};`).join("\n")}\nexport const sub = (a, b) => a - b;\n`);
+  git("add", "-A");
+  git("commit", "-qm", "implementer commit");
+  await pass(l);
+  const out = await run(l, await stop());
+  assert.equal(out?.decision, "block");
+  assert.match(out!.reason!, /risk low: .*líneas cambiadas/);
+  assert.ok(out!.reason!.includes(`git diff ${baseCommit}`));
+  const s = await state(l);
+  assert.deepEqual(s.review, { level: "low", reasons: [s.review!.reasons[0]!], requested: true });
+
+  await writeFile(path.join(l.root, "src", "extra.js"), "export const z = 1;\n");
+  await pass(l);
+  const done = await run(l, await stop());
+  assert.match(done!.systemMessage!, /revisión pedida y no hecha; riesgo low \(.*líneas cambiadas/);
+});
+
+test("no baseCommit and low risk: the decision is recorded and shown in the summary", async () => {
+  const l = await lab();
+  await implement(l);
+  await pass(l);
+  const out = await run(l, await stop());
+  assert.match(out!.systemMessage!, /revisión omitida \(bajo riesgo\); riesgo none/);
+  assert.deepEqual((await state(l)).review, { level: "none", reasons: [], requested: false });
+});

@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
-import { assessRisk } from "../lib/risk.ts";
+import { assessRisk, diffBase, gitHead, withBaseCommit } from "../lib/risk.ts";
 import type { Decision, Manifest, Plan, Task } from "../lib/types.ts";
 
 const base: Manifest = { version: 1, setup: "done", verify: [], connectors: [] };
@@ -140,4 +140,71 @@ test("levels: always is high, never is none, always wins", async () => {
   assert.equal(await lvl([], task, { ...base, review: { always: true } }), "high");
   assert.equal(await lvl([["package.json", 900]], task, { ...base, review: { never: true } }), "none");
   assert.equal(await lvl([], task, { ...base, review: { always: true, never: true } }), "high");
+});
+
+// ---------------------------------------------------------------------------
+// baseCommit: the diff is measured from the commit the task started at
+// ---------------------------------------------------------------------------
+
+const sh = (root: string, ...args: string[]) => execFileSync("git", args, { cwd: root, stdio: "ignore" });
+const lines = (n: number, tag = "l") => Array.from({ length: n }, (_, i) => `${tag} ${i}`).join("\n") + "\n";
+
+/** A repo whose implementer committed `committed` lines, then left `uncommitted` lines and `fresh` new files behind. */
+async function implemented(opts: { committed?: number; uncommitted?: number; fresh?: string[] } = {}) {
+  const root = repo();
+  const baseCommit = await gitHead(root);
+  if (opts.committed) {
+    fs.writeFileSync(path.join(root, "big.ts"), lines(opts.committed));
+    sh(root, "add", "-A");
+    sh(root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "impl");
+  }
+  if (opts.uncommitted) fs.writeFileSync(path.join(root, "README.md"), lines(opts.uncommitted, "r"));
+  for (const f of opts.fresh ?? []) {
+    fs.mkdirSync(path.dirname(path.join(root, f)), { recursive: true });
+    fs.writeFileSync(path.join(root, f), "x\n");
+  }
+  return { root, withBase: { ...task, ...(baseCommit ? { baseCommit } : {}) } as Task };
+}
+
+test("committed work: HEAD sees nothing, baseCommit sees the whole diff", async () => {
+  const { root, withBase } = await implemented({ committed: 250 });
+  assert.equal((await assessRisk(root, task, base)).level, "none", "no base: current behavior, the diff against HEAD is empty");
+  const r = await assessRisk(root, withBase, base);
+  assert.equal(r.level, "low");
+  assert.match(r.reasons[0]!, /250 líneas/);
+});
+
+test("baseCommit adds commits, uncommitted changes and new files in new folders", async () => {
+  const { root, withBase } = await implemented({ committed: 150, uncommitted: 60, fresh: ["new/dir/a.ts", "new/dir/b.ts"] });
+  const r = await assessRisk(root, withBase, base);
+  assert.equal(r.level, "low");
+  assert.match(r.reasons[0]!, /215 líneas/, "150 committed + 61 (+60 -1) uncommitted + 2 per new file");
+});
+
+test("a risk trigger in a committed file is found through baseCommit", async () => {
+  const root = repo();
+  const baseCommit = await gitHead(root);
+  fs.mkdirSync(path.join(root, "db/migrate"), { recursive: true });
+  fs.writeFileSync(path.join(root, "db/migrate/001.rb"), "x\n");
+  sh(root, "add", "-A");
+  sh(root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "m");
+  assert.equal((await assessRisk(root, task, base)).level, "none");
+  const r = await assessRisk(root, { ...task, ...(baseCommit ? { baseCommit } : {}) }, base);
+  assert.equal(r.level, "high");
+  assert.match(r.reasons.join(), /migración/);
+});
+
+test("an unknown baseCommit falls back to HEAD; withBaseCommit keeps the first base and degrades without git", async () => {
+  const { root } = await implemented({ committed: 250 });
+  assert.equal(await diffBase(root, { baseCommit: "deadbeefdeadbeef" }), "HEAD");
+  assert.equal(await diffBase(root, { baseCommit: "--output=x" }), "HEAD", "not a hash: never passed to git");
+  assert.equal(await diffBase(root, undefined), "HEAD");
+  const first = await withBaseCommit(root, task);
+  assert.equal(first.baseCommit, await gitHead(root));
+  sh(root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--allow-empty", "-qm", "later");
+  assert.equal((await withBaseCommit(root, task, first)).baseCommit, first.baseCommit, "same task: base kept");
+  assert.notEqual((await withBaseCommit(root, { ...task, id: "other" }, first)).baseCommit, first.baseCommit, "another task: new base");
+  const notRepo = fs.mkdtempSync(path.join(os.tmpdir(), "risk-nogit-"));
+  assert.deepEqual(await withBaseCommit(notRepo, task), task);
+  assert.equal(await gitHead(notRepo), undefined);
 });

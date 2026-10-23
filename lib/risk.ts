@@ -33,6 +33,29 @@ const git = (root: string, args: string[]): Promise<string> =>
     execFile("git", args, { cwd: root, timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER }, (err, stdout) => resolve(err ? "" : stdout));
   });
 
+/** Current HEAD commit, or `undefined` when there is no git, no repo or no commit yet. */
+export async function gitHead(root: string): Promise<string | undefined> {
+  const out = (await git(root, ["rev-parse", "--verify", "-q", "HEAD"])).trim();
+  return /^[0-9a-f]{7,64}$/.test(out) ? out : undefined;
+}
+
+/**
+ * `task` with `baseCommit` set: kept when the same task already has one, else the current HEAD. Without git the task
+ * is returned unchanged and every diff measure falls back to HEAD.
+ */
+export async function withBaseCommit(root: string, task: Task, previous?: Task): Promise<Task> {
+  const kept = previous && previous.id === task.id ? previous.baseCommit : undefined;
+  const base = kept ?? (await gitHead(root));
+  return base ? { ...task, baseCommit: base } : task;
+}
+
+/** The ref diffs are measured against: the task's `baseCommit` when it still resolves, else `HEAD` (current behavior). */
+export async function diffBase(root: string, task: Pick<Task, "baseCommit"> | undefined): Promise<string> {
+  const base = task?.baseCommit;
+  if (!base || !/^[0-9a-f]{7,64}$/.test(base)) return "HEAD";
+  return (await git(root, ["rev-parse", "--verify", "-q", `${base}^{commit}`])).trim() ? base : "HEAD";
+}
+
 const threshold = (value: number | undefined, fallback: number) => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback);
 
 /** Reasons that make `files` high risk whatever their size: dependencies, migrations, `review.paths`, sensitive zones. */
@@ -51,18 +74,25 @@ export function highRiskReasons(files: string[], rule: ReviewPolicy | undefined)
   return reasons;
 }
 
+/** What `assessRisk` decided; `review` is whether a review is requested. */
+export interface RiskAssessment {
+  review: boolean;
+  level: RiskLevel;
+  reasons: string[];
+}
+
 /**
  * How much review the diff needs. `none`: skip it. `low`: a cheap-model review. `high`: the strong-model review.
  * Cheap: git and regexes, no LLM. Doubt goes up a level, never down.
  */
-export async function assessRisk(root: string, task: Task | undefined, manifest: Manifest): Promise<{ review: boolean; level: RiskLevel; reasons: string[] }> {
+export async function assessRisk(root: string, task: Task | undefined, manifest: Manifest): Promise<RiskAssessment> {
   const rule = manifest.review;
   // `always` wins over `never` (see ReviewPolicy in types.ts).
   if (rule?.always) return { review: true, level: "high", reasons: ["review.always"] };
   if (rule?.never) return { review: false, level: "none", reasons: ["review.never"] };
 
   const lines = new Map<string, number>();
-  for (const row of (await git(root, ["diff", "HEAD", "--numstat"])).split("\n")) {
+  for (const row of (await git(root, ["diff", await diffBase(root, task), "--numstat"])).split("\n")) {
     const m = /^(\d+|-)\t(\d+|-)\t(.+)$/.exec(row);
     if (m) lines.set(m[3]!, (m[1] === "-" ? 0 : Number(m[1])) + (m[2] === "-" ? 0 : Number(m[2])));
   }
