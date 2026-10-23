@@ -7,6 +7,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { appendRecord, buildRecord, readRecords, RETRO_EVERY } from "../lib/learn.ts";
 import { taskPath } from "../lib/paths.ts";
 import type { Task } from "../lib/types.ts";
@@ -247,4 +248,34 @@ test("wf-plan-validate reads the ticket text captured for the session, like the 
   await mkdir(path.join(data, "evidence"), { recursive: true });
   await writeFile(path.join(data, "evidence", "s-1.txt"), "PAY-1: add sub(a, b) to math");
   assert.match((await validate(root, plan, ["--session", "s-1", "--data", data])).stdout, /^ACCEPTED/);
+});
+
+test("wf-plan-validate stores baseCommit (HEAD) in a git repo and omits it without git", async () => {
+  const root = await fastProject();
+  assert.equal(JSON.parse(await readFile(taskPath(root), "utf8").catch(() => "{}")).baseCommit, undefined);
+  assert.match((await validate(root, wfPlan())).stdout, /^ACCEPTED/);
+  assert.equal(JSON.parse(await readFile(taskPath(root), "utf8")).baseCommit, undefined, "no git: no base, behavior unchanged");
+
+  const repoRoot = await fastProject();
+  await git(repoRoot, "init", "-q");
+  await git(repoRoot, "add", "-A");
+  await git(repoRoot, "commit", "-qm", "init");
+  const head = (await promisify(execFile)("git", ["-C", repoRoot, "rev-parse", "HEAD"])).stdout.trim();
+  assert.match((await validate(repoRoot, wfPlan())).stdout, /^ACCEPTED/);
+  assert.equal(JSON.parse(await readFile(taskPath(repoRoot), "utf8")).baseCommit, head);
+});
+
+test("wf-done measures the task's files from its baseCommit, so committed work is recorded", async () => {
+  const root = await project();
+  await git(root, "init", "-q");
+  await mkdir(path.join(root, "src"));
+  await writeFile(path.join(root, "src/index.ts"), "x\n");
+  await git(root, "add", ".");
+  await git(root, "commit", "-qm", "init");
+  const baseCommit = (await promisify(execFile)("git", ["-C", root, "rev-parse", "HEAD"])).stdout.trim();
+  await writeFile(path.join(root, "src/refund.ts"), "export const refund = 1;\n");
+  await git(root, "add", ".");
+  await git(root, "commit", "-qm", "implementer");
+  await writeTask(root, task({ baseCommit }));
+  assert.match((await run("wf-done.mjs", root)).stdout, /Files: src\/refund\.ts\./);
 });

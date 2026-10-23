@@ -153,6 +153,8 @@ export interface Task {
    * hooks fire in every session open on the project. Stamped by the dispatcher's `saveTask`; absent means "any session".
    */
   sessionId?: string;
+  /** HEAD when the task entered planning; diffs are measured against it. Absent (no git, older task): against HEAD. */
+  baseCommit?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -188,10 +190,19 @@ export interface SessionState {
   planVerdict?: Verdict | undefined;
   /** Last `VERDICT:` of the diff reviewer on the current task. */
   reviewVerdict?: Verdict | undefined;
+  /** What the gate last decided about the diff review on the current task (level, reasons, whether it was requested). */
+  review?: ReviewRecord | undefined;
   /** What the orchestrator's last Stop block asked for, so the same request is not repeated in a loop. */
   lastBlock?: string | undefined;
   /** Fingerprint of the working copy when verify last passed in the orchestrator's Stop; unchanged means no rerun. */
   verifiedFingerprint?: string | undefined;
+}
+
+/** The gate's last review decision, recorded in the session state. */
+export interface ReviewRecord {
+  level: RiskLevel;
+  reasons: string[];
+  requested: boolean;
 }
 
 /** Verdict line a strong-model checker ends with: `VERDICT: OK` or `VERDICT: FIX`. */

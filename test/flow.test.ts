@@ -212,7 +212,7 @@ test("the full task flow, event by event, through the hooks.json commands", asyn
   assert.match(String(reviewed?.systemMessage), /revisión del diff: OK/);
   const summary = await stop("Review OK.");
   assert.equal(summary?.decision, undefined);
-  assert.match(String(summary?.systemMessage), /contrato de interfaz OK; verify OK \(1 pasos\); revisión: OK\. Comprueba el resultado y cierra con \/done/);
+  assert.match(String(summary?.systemMessage), /contrato de interfaz OK; verify OK \(1 pasos\); revisión: OK; riesgo high \(.*\)\. Comprueba el resultado y cierra con \/done/);
 
   // 12. /done (the skill's injected command): the record lands in tasks.jsonl and the task is closed.
   const done = await sh(`node --experimental-strip-types "${path.join(PLUGIN_ROOT, "bin", "wf-done.mjs")}"`, "", env);

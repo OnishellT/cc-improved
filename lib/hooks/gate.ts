@@ -5,7 +5,8 @@ import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import * as path from "node:path";
 import { manifestPath, WORKFLOW_DIR, type Env } from "../paths.ts";
-import type { BackgroundTask, Manifest, SessionState, StopFields, Verdict } from "../types.ts";
+import type { BackgroundTask, Manifest, ReviewRecord, RiskLevel, SessionState, StopFields, Task, Verdict } from "../types.ts";
+import { diffBase } from "../risk.ts";
 import { formatVerify, isPolicyFailure, runVerify } from "../verify.ts";
 import type { HookContext } from "./dispatch.ts";
 
@@ -93,7 +94,7 @@ export async function loadGateState(ctx: HookContext, input: StopFields): Promis
   const taskId = ctx.task?.id;
   if (taskId && s.taskId !== taskId) {
     if (s.taskId !== undefined) {
-      Object.assign(s, { reviews: 0, planChecks: 0, failures: 0, agents: undefined, planVerdict: undefined, reviewVerdict: undefined, verifiedFingerprint: undefined, lastBlock: undefined });
+      Object.assign(s, { reviews: 0, planChecks: 0, failures: 0, agents: undefined, review: undefined, planVerdict: undefined, reviewVerdict: undefined, verifiedFingerprint: undefined, lastBlock: undefined });
     }
     s.taskId = taskId;
   }
@@ -124,11 +125,11 @@ export async function verify(ctx: HookContext, steps: string[]): Promise<VerifyO
 const git = (root: string, args: string[]): Promise<string> =>
   new Promise((resolve) => execFile("git", ["-C", root, ...args], { timeout: 30_000, maxBuffer: 32 * 1024 * 1024 }, (err, out) => resolve(err ? "" : out)));
 
-/** Fingerprint of the working copy (diff, status, untracked sizes and times); empty when it is not a git repo. */
-export async function fingerprint(root: string): Promise<string> {
+/** Fingerprint of the working copy (diff against the task's base, status, untracked sizes and times); empty when it is not a git repo. */
+export async function fingerprint(root: string, task?: Pick<Task, "baseCommit">): Promise<string> {
   const [status, diff, others] = await Promise.all([
     git(root, ["status", "--porcelain"]),
-    git(root, ["diff", "HEAD"]),
+    git(root, ["diff", await diffBase(root, task)]),
     git(root, ["ls-files", "--others", "--exclude-standard"]),
   ]);
   if (!status && !diff && !others && !(await git(root, ["rev-parse", "--git-dir"]))) return "";
@@ -144,6 +145,9 @@ export async function fingerprint(root: string): Promise<string> {
 // ---------------------------------------------------------------------------
 // Texts the model reads (English, self-contained)
 // ---------------------------------------------------------------------------
+
+/** `risk` as the record kept in the session state. */
+export const reviewRecord = (risk: { review: boolean; level: RiskLevel; reasons: string[] }): ReviewRecord => ({ level: risk.level, reasons: risk.reasons, requested: risk.review });
 
 export const DIAGNOSE_METHOD = [
   "Diagnose before changing more code:",

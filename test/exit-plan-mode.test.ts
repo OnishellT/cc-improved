@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
@@ -300,4 +301,28 @@ test("plan check variant: strong_model sonnet keeps the cheap variant even when 
   assert.match(reasonOf(other.out), /subagent_type "cc-improved:plan-check", model "claude-opus-5-5"/);
   const big = await checked({}, goodPlan({ files: ["a.js", "b.js", "c.js", "d.js", "e.js", "test/a.test.js"] }), { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "claude-opus-5-5" });
   assert.match(reasonOf(big.out), /subagent_type "cc-improved:plan-check-sonnet", run_in_background/);
+});
+
+test("PreToolUse stores baseCommit when the project is a git repo and keeps it when the plan is resubmitted", async () => {
+  const { env, root } = await project();
+  const git = (...args: string[]) => execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@t", ...args], { stdio: "pipe" }).toString().trim();
+  git("init", "-q");
+  git("add", "-A");
+  git("commit", "-qm", "init");
+  const head = git("rev-parse", "HEAD");
+  await pre(env, goodPlan());
+  assert.equal((await readTask(root)).baseCommit, head);
+  git("commit", "--allow-empty", "-qm", "later");
+  await pre(env, goodPlan());
+  assert.equal((await readTask(root)).baseCommit, head, "same task: the base does not move");
+  const raw = await fixture("post-tool-use.exit-plan-mode");
+  raw.tool_response.plan = markdown(goodPlan());
+  await dispatch(JSON.stringify(raw), { env });
+  assert.equal((await readTask(root)).baseCommit, head, "approval keeps it");
+});
+
+test("PreToolUse without git: no baseCommit and the task is saved as before", async () => {
+  const { env, root } = await project();
+  await pre(env, goodPlan());
+  assert.equal((await readTask(root)).baseCommit, undefined);
 });

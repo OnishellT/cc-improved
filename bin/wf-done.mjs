@@ -7,6 +7,7 @@ import { readFile, rename, writeFile } from "node:fs/promises";
 
 async function close() {
   const { projectDir, taskPath, TASK_PATH, TASKS_LOG_PATH } = await import("../lib/paths.ts");
+  const { diffBase } = await import("../lib/risk.ts");
   const { appendRecord, buildRecord, changedFiles, readRecords, retroDue, RETRO_EVERY } = await import("../lib/learn.ts");
   const root = projectDir();
   const file = taskPath(root);
@@ -28,7 +29,7 @@ async function close() {
 
   task.status = "done";
   task.completedAt = new Date().toISOString();
-  const record = buildRecord(task, await changedFiles(root));
+  const record = buildRecord(task, await changedFiles(root, await diffBase(root, task)));
   // A run that recorded the task but failed before marking it done must not record it twice.
   const records = await readRecords(root);
   const count = records.some((r) => r.id === record.id) ? records.length : await appendRecord(root, record);

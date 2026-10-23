@@ -45,10 +45,10 @@ function git(root: string, args: string[]): Promise<string | undefined> {
   });
 }
 
-/** Files modified or untracked in the working copy, excluding the workflow's own state. */
-export async function changedFiles(root: string): Promise<string[]> {
+/** Files changed since `base` (default HEAD: commits since `base`, uncommitted and untracked), excluding the workflow's own state. */
+export async function changedFiles(root: string, base = "HEAD"): Promise<string[]> {
   const files = new Set<string>();
-  const diff = await git(root, ["diff", "--name-only", "HEAD"]);
+  const diff = await git(root, ["diff", "--name-only", base]);
   for (const line of (diff ?? "").split("\n")) if (line.trim()) files.add(line.trim());
   // `-uall`: a new file in a new directory is listed by its own path, not as the directory.
   const status = await git(root, ["status", "--porcelain", "--untracked-files=all"]);
