@@ -49,14 +49,12 @@ test("ninguna skill nombra otra skill inexistente", () => {
   const patterns = [
     /Skill tool with [`"']([a-z0-9-]+)[`"']/g,
     /`([a-z0-9-]+)` skill\b/g,
-    /\bthe ([a-z0-9-]+) skill\b/g,
   ];
   for (const d of dirs) {
     const text = readFileSync(join(root, d.name, "SKILL.md"), "utf8");
     for (const re of patterns) {
       for (const m of text.matchAll(re)) {
         const ref = m[1] as string;
-        if (!ref.includes("-") && !names.has(ref)) continue; // plain words like "the verification skill"
         assert.ok(names.has(ref), `${d.name} references missing skill ${ref}`);
       }
     }
