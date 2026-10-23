@@ -13,7 +13,11 @@ async function validate(args) {
   const { highRiskReasons } = await import("../lib/risk.ts");
 
   const opt = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
-  const session = opt("--session");
+  // An unsubstituted `${CLAUDE_SESSION_ID}` (or an empty value) must not become the task's owner: hooks would skip
+  // every gate for a task "owned" by a session that does not exist. Without a valid id the task belongs to any session.
+  const given = opt("--session");
+  const session = given && /^[A-Za-z0-9_-]+$/.test(given) ? given : undefined;
+  if (args.includes("--session") && !session) process.stderr.write(`wf-plan-validate: ignoring --session ${JSON.stringify(given ?? "")}: not a session id; the task is not tied to a session.\n`);
   const env = { ...process.env, ...(opt("--data") ? { CLAUDE_PLUGIN_DATA: opt("--data") } : {}) };
   const file = args.find((a, i) => !a.startsWith("--") && !["--session", "--data"].includes(args[i - 1]));
   if (!file) return "REJECTED: pass the plan file: wf-plan-validate.mjs <file>.";

@@ -97,7 +97,7 @@ Fuera del plugin y a propósito. La última palabra sobre la funcionalidad la ti
 
 **Estado.** `.claude/workflow.json` es el estado del proyecto (versionado). `.claude/workflow/task.json` es la tarea activa (local, ignorada por git) con `status` (`planning` | `implementing` | `done`), `plan` y `sessionId`. El estado de gates va por `session_id` en `${CLAUDE_PLUGIN_DATA}/sessions/`; los hooks disparan en todas las sesiones del proyecto e ignoran el estado ajeno.
 
-**Modelos por fase.** La sesión y el `implementer` usan el modelo de la sesión. `plan-check`, `reviewer` y `fixer` usan `strong_model` (opción de usuario del plugin; `opus` por defecto, `sonnet` selecciona las variantes `-sonnet`). El modelo fuerte se usa en el chequeo del plan, en la revisión cuando hay riesgo y en el tercer intento de corrección.
+**Modelos por fase.** La sesión y el `implementer` usan el modelo de la sesión. `plan-check`, `reviewer` y `fixer` usan `strong_model` (opción de usuario del plugin; `opus` por defecto, `sonnet` selecciona las variantes `-sonnet`). El modelo fuerte se usa en el chequeo del plan, en la revisión cuando hay riesgo y en el segundo intento de corrección (D-009).
 
 **Skills por fase.** Las skills de método viven en `skills/` y los agents las nombran en su frontmatter (`tdd` para el implementer, `blast-radius` para el reviewer, `diagnosing-bugs` para el fixer): el modelo no elige una skill de método. `/setup` carga `grilling`, `domain-modeling`, `technical-writing` y `create-verification-skill`; `/done` carga `retro` y `maintain-verification-skill`.
 

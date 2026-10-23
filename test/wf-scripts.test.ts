@@ -180,6 +180,28 @@ test("wf-plan-validate accepts a small valid plan and stores task.json as implem
   assert.match(stored.planFilePath, /plan\.md$/);
 });
 
+test("wf-plan-validate keeps a valid session id but drops a literal or empty one, and the gates still run on the task", async () => {
+  const { dispatch } = await import("../lib/hooks/dispatch.ts");
+  for (const bad of ["${CLAUDE_SESSION_ID}", "$CLAUDE_SESSION_ID", ""]) {
+    const root = await fastProject();
+    const { code, stdout, stderr } = await validate(root, wfPlan(), ["--session", bad]);
+    assert.equal(code, 0);
+    assert.match(stdout, /^ACCEPTED/);
+    assert.match(stderr, /not a session id/);
+    const stored = JSON.parse(await readFile(taskPath(root), "utf8"));
+    assert.ok(!("sessionId" in stored), `no sessionId for ${JSON.stringify(bad)}`);
+    // The dispatcher treats the task as any session's: the Stop gate runs and blocks on the missing contract.
+    const env = { CLAUDE_PROJECT_DIR: root, CLAUDE_PLUGIN_DATA: path.join(root, "data") };
+    const stop = { session_id: "real-session", transcript_path: "/x", cwd: root, hook_event_name: "Stop", stop_hook_active: false, last_assistant_message: "done", background_tasks: [] };
+    const out = JSON.parse((await dispatch(JSON.stringify(stop), { env })) || "{}");
+    assert.equal(out.decision, "block", "gate ran");
+    assert.match(out.reason, /missing sub|does not exist/);
+  }
+  const root = await fastProject();
+  await validate(root, wfPlan(), ["--session", "abc-123_X"]);
+  assert.equal(JSON.parse(await readFile(taskPath(root), "utf8")).sessionId, "abc-123_X");
+});
+
 test("wf-plan-validate rejects an invented name, the same gate as ExitPlanMode, and saves nothing", async () => {
   const root = await fastProject();
   const { code, stdout } = await validate(root, wfPlan({ interface: [{ file: "src/math.js", exports: ["sub", "powerOfTwo"], source: "docs/spec.md" }] }));
