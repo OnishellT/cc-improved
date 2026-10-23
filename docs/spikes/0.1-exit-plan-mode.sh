@@ -50,7 +50,8 @@ exit 0
 HOOK
   chmod +x "$dir/hook.sh"
 
-  local h="bash $dir/hook.sh"
+  local h
+  h="bash $(printf '%q' "$dir/hook.sh")"
   jq -n --arg h "$h" '{
     hooks: {
       PreToolUse:         [{matcher:"*", hooks:[{type:"command", command:($h+" PreToolUse"), timeout:10}]}],
@@ -100,6 +101,11 @@ HOST
 
 run_variant() {
   local v="$1" dir="$WORK/$1"
+  # Validate before setup_fixture, which runs `rm -rf "$dir"`: only known names may become a directory.
+  case "$v" in
+    plan-default|plan-tools|stream-json|sdk-host) ;;
+    *) echo "unknown variant: $v" >&2; return 1 ;;
+  esac
   setup_fixture "$dir"
   local common=(--model haiku --permission-mode plan --settings "$dir/settings.json" --max-budget-usd 0.15)
   echo "== $v"
@@ -155,4 +161,5 @@ summarize() {
 }
 
 mkdir -p "$WORK"
+WORK="$(cd "$WORK" && pwd)"
 for v in "${VARIANTS[@]}"; do run_variant "$v"; done
