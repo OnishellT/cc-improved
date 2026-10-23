@@ -11,7 +11,8 @@
   "scripts": {
     "test": "node --experimental-strip-types --test \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "validate": "claude plugin validate ."
+    "validate": "claude plugin validate .",
+    "e2e": "node test/e2e/run.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

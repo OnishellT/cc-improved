@@ -118,6 +118,11 @@ export interface Task {
   /** ISO 8601 timestamps. */
   startedAt: string;
   completedAt?: string;
+  /**
+   * `session_id` of the session that last wrote `task.json`. Hooks of any other session skip their handlers, since
+   * hooks fire in every session open on the project. Stamped by the dispatcher's `saveTask`; absent means "any session".
+   */
+  sessionId?: string;
 }
 
 // ---------------------------------------------------------------------------

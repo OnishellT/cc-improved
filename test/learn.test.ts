@@ -3,7 +3,8 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
-import { RETRO_EVERY, appendRecord, buildRecord, readRecords, relatedTasks, relatedTasksText, retroDue } from "../lib/learn.ts";
+import { execFileSync } from "node:child_process";
+import { RETRO_EVERY, appendRecord, buildRecord, changedFiles, readRecords, relatedTasks, relatedTasksText, retroDue } from "../lib/learn.ts";
 import { tasksLogPath } from "../lib/paths.ts";
 import type { Task } from "../lib/types.ts";
 
@@ -58,4 +59,19 @@ test("retro is due on every 5th record", async () => {
   assert.equal(RETRO_EVERY, 5);
   assert.deepEqual(due.map((d, i) => d && i + 1), [false, false, false, false, 5, false, false, false, false, 10]);
   assert.equal(retroDue(0), false);
+});
+
+test("changedFiles lists each new file inside a new directory, not the directory", async () => {
+  const root = await tempProject();
+  const git = (...args: string[]) => execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@t", ...args], { stdio: "ignore" });
+  await fs.writeFile(path.join(root, "a.txt"), "a\n");
+  git("init", "-q");
+  git("add", "-A");
+  git("commit", "-qm", "init");
+  await fs.writeFile(path.join(root, "a.txt"), "b\n");
+  await fs.mkdir(path.join(root, "docs", "adr"), { recursive: true });
+  await fs.writeFile(path.join(root, "docs", "adr", "0001-x.md"), "# x\n");
+  await fs.mkdir(path.join(root, ".claude", "workflow"), { recursive: true });
+  await fs.writeFile(path.join(root, ".claude", "workflow", "task.json"), "{}");
+  assert.deepEqual((await changedFiles(root)).sort(), ["a.txt", "docs/adr/0001-x.md"]);
 });

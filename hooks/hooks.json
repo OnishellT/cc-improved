@@ -1,0 +1,62 @@
+{
+  "description": "cc-improved: every event enters through bin/wf-hook.mjs, which dispatches to lib/hooks/ (see lib/hooks/README.md). Timeouts stay above the dispatcher budgets: 8 s for quick events, 570 s for the Stop/SubagentStop gates that run verify.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node --experimental-strip-types \"${CLAUDE_PLUGIN_ROOT}/bin/wf-hook.mjs\"", "timeout": 15 }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          { "type": "command", "command": "node --experimental-strip-types \"${CLAUDE_PLUGIN_ROOT}/bin/wf-hook.mjs\"", "timeout": 15 }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          { "type": "command", "command": "node --experimental-strip-types \"${CLAUDE_PLUGIN_ROOT}/bin/wf-hook.mjs\"", "timeout": 15 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          { "type": "command", "command": "node --experimental-strip-types \"${CLAUDE_PLUGIN_ROOT}/bin/wf-hook.mjs\"", "timeout": 15 }
+        ]
+      },
+      {
+        "matcher": "mcp__.*",
+        "hooks": [
+          { "type": "command", "command": "node --experimental-strip-types \"${CLAUDE_PLUGIN_ROOT}/bin/wf-hook.mjs\"", "timeout": 15 }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node --experimental-strip-types \"${CLAUDE_PLUGIN_ROOT}/bin/wf-hook.mjs\"", "timeout": 15 }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "(^|:)(implementer|reviewer|plan-check|fixer)(-sonnet)?$",
+        "hooks": [
+          { "type": "command", "command": "node --experimental-strip-types \"${CLAUDE_PLUGIN_ROOT}/bin/wf-hook.mjs\"", "timeout": 600 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node --experimental-strip-types \"${CLAUDE_PLUGIN_ROOT}/bin/wf-hook.mjs\"", "timeout": 600 }
+        ]
+      }
+    ]
+  }
+}

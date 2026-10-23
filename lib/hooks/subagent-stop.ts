@@ -3,10 +3,10 @@
 // 2nd → fix with the diagnosis method, 3rd → let it out with FAILED so the orchestrator escalates (implementer →
 // fixer, fixer → the person). reviewer / plan-check: store the `VERDICT:` of the final answer.
 // `stop_hook_active` is true on every continuation (spike 0.3), so the counts live in the session state instead.
-import { fileURLToPath } from "node:url";
 import { checkContract, formatContract } from "../contract.ts";
 import type { AgentGateState, SessionState, StopOutput, SubagentStopInput } from "../types.ts";
 import type { HookContext, HookModule } from "./dispatch.ts";
+import { recordPlanCheckVerdict } from "./exit-plan-mode.ts";
 import {
   DIAGNOSE_AT,
   DIAGNOSE_METHOD,
@@ -108,32 +108,12 @@ async function verdictGate(input: SubagentStopInput, ctx: HookContext, name: "re
   } else {
     s.planChecks++;
     s.planVerdict = verdict;
-    // The ExitPlanMode gate (#19) reads its own copy of the verdict; it parses the same answer.
-    const record = await planCheckRecorder();
-    if (record) await record(input, ctx);
+    // The ExitPlanMode gate reads its own copy of the verdict; it parses the same answer.
+    await recordPlanCheckVerdict(input, ctx);
   }
   await store(ctx, s);
   const label = name === "reviewer" ? "revisión del diff" : "chequeo del plan";
   return { systemMessage: `cc-improved: ${label}: ${verdict ?? "sin línea VERDICT"}.` };
-}
-
-type Recorder = (input: SubagentStopInput, ctx: HookContext) => Promise<unknown>;
-
-/**
- * `recordPlanCheckVerdict` from exit-plan-mode.ts (#19), loaded lazily so this module works with or without it.
- * Only the module being absent counts as "not there"; a module that fails to load is a real error and propagates.
- */
-async function planCheckRecorder(): Promise<Recorder | undefined> {
-  const url = new URL("./exit-plan-mode.ts", import.meta.url);
-  try {
-    const mod = (await import(url.href)) as { recordPlanCheckVerdict?: Recorder };
-    return typeof mod.recordPlanCheckVerdict === "function" ? mod.recordPlanCheckVerdict : undefined;
-  } catch (err) {
-    const e = err as { code?: unknown; url?: unknown; message?: unknown };
-    const missing = e?.code === "ERR_MODULE_NOT_FOUND" && (e.url === url.href || (typeof e.message === "string" && e.message.includes(fileURLToPath(url))));
-    if (missing) return undefined;
-    throw err;
-  }
 }
 
 export default {

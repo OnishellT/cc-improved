@@ -50,7 +50,8 @@ export async function changedFiles(root: string): Promise<string[]> {
   const files = new Set<string>();
   const diff = await git(root, ["diff", "--name-only", "HEAD"]);
   for (const line of (diff ?? "").split("\n")) if (line.trim()) files.add(line.trim());
-  const status = await git(root, ["status", "--porcelain"]);
+  // `-uall`: a new file in a new directory is listed by its own path, not as the directory.
+  const status = await git(root, ["status", "--porcelain", "--untracked-files=all"]);
   for (const line of (status ?? "").split("\n")) if (line.startsWith("??")) files.add(line.slice(3).trim());
   return [...files].filter((f) => !f.startsWith(".claude/workflow/"));
 }
