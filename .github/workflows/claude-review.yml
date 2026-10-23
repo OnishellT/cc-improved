@@ -1,0 +1,25 @@
+name: claude-review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+jobs:
+  claude-review:
+    name: claude-review
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            Review this PR as the project's reviewer. Read docs/CONVENTIONS.md first. Check: the PR closes exactly one issue and stays in its scope; tests cover the change and pass; no harness-specific code leaks into lib/; language-agnostic rule respected (no fixed tsc/eslint/npm assumptions outside the manifest); hook handlers never throw and respect timeouts; names and files follow the conventions. Post one review comment with findings ordered by severity; say "LGTM" explicitly when nothing blocks the merge.
+          claude_args: "--allowed-tools Read,Grep,Glob,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(npm test),Bash(npm run typecheck)"
