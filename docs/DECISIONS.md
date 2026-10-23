@@ -43,3 +43,9 @@ Registro corto de decisiones de proceso del repo. Una entrada por decisión, con
 - **Contexto:** `ReviewPolicy` (`lib/types.ts`) admite `always` y `never`, y un manifiesto puede traer ambos.
 - **Decisión:** si los dos están activos, `always` gana: se revisa cada tarea. Es la opción que gasta más pero no omite una revisión pedida de forma explícita.
 - **Consecuencia:** `never: true` solo tiene efecto sin `always`. El comentario del campo `always` en `lib/types.ts` lo indica.
+
+## D-010: `/setup` lo ejecuta una sola vez el modelo grande (opus)
+
+- **Contexto:** el setup produce los artefactos que reutilizan todas las tareas (CLAUDE.md, herramientas de verificación, skills del proyecto, manifest); conviene que lo haga el modelo grande y una sola vez. `${user_config.*}` no se sustituye en `model:` (spike 0.4), así que el modelo no puede venir de la configuración.
+- **Decisión:** `skills/setup/SKILL.md` lleva `model: opus` literal. Comprobado con `claude -p --plugin-dir . --model claude-haiku-5-5 --output-format json` (2.1.309): con `/cc-improved:setup` el `modelUsage` solo trae `claude-opus-5-5` (0,129 USD); un prompt de control sin la skill solo trae `claude-haiku-5-5` (0,002 USD). El `model` de la skill se respeta y el turno se factura a opus aunque la sesión sea haiku. La skill sigue en el hilo principal, así que `AskUserQuestion` funciona; no hace falta el fallback de un agent (los agents no pueden preguntar). Con `setup: "done"`, `/setup` avisa del coste y pide confirmación antes de repetir; `SessionStart` ya no lo ofrece en ese estado.
+- **Consecuencia:** el override de la skill dura el turno en que se invoca; el modelo de la sesión vuelve después. Un setup repetido cuesta tokens de opus y exige confirmación. Si un cambio de Claude Code dejara de respetar `model` en skills, el test de frontmatter no lo detecta: hay que repetir la comprobación.

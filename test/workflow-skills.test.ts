@@ -29,7 +29,7 @@ async function load(name: string): Promise<Skill> {
   return { name, meta, body: match[2] ?? "" };
 }
 
-const KNOWN = new Set(["name", "description", "argument-hint", "disable-model-invocation", "allowed-tools", "user-invocable"]);
+const KNOWN = new Set(["name", "description", "argument-hint", "disable-model-invocation", "allowed-tools", "user-invocable", "model"]);
 // Who may invoke each skill: /task and /done are the user's act (start and close a task); /verify only reports.
 const expected: Record<string, { userOnly: boolean; scripts: string[] }> = {
   task: { userOnly: true, scripts: ["wf-related.mjs"] },
@@ -109,4 +109,22 @@ test("skill task: the implementer brief lists the project's verification tools f
   const brief = /```\n\s*Task: <title>[\s\S]*?```/.exec(body)?.[0] ?? "";
   assert.match(brief, /Project verification tools available \(from \.claude\/skills\/verify-app\/SKILL\.md/);
   assert.match(brief, /`<exact command from the skill>`/);
+});
+
+test("skill setup: runs on the large model, a literal `opus` (user_config is not substituted in `model:`, D-010)", async () => {
+  const s = await load("setup");
+  assert.equal(s.meta.model, "opus");
+  assert.equal(s.meta["disable-model-invocation"], "true");
+  assert.match(s.meta["allowed-tools"] ?? "", /AskUserQuestion/, "setup asks in the main thread");
+});
+
+test("skill setup: with setup done it warns about the cost and asks before repeating; SessionStart stays quiet", async () => {
+  const { body } = await load("setup");
+  const start = body.slice(body.indexOf("1. **Start.**"), body.indexOf("2. **Read.**"));
+  assert.match(start, /`manifest\.setup` is `"done"`/);
+  assert.match(start, /costs far more/);
+  assert.match(start, /do not run `--start`/);
+  assert.ok(start.indexOf('"done"') < start.indexOf("--start --language"), "the confirmation comes before --start");
+  const { setupNote } = await import("../lib/hooks/session-start.ts");
+  assert.equal(setupNote("done"), undefined);
 });
