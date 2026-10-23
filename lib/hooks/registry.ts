@@ -51,6 +51,6 @@ export const REGISTRY: Record<HookEventName, EventRoute> = {
   PostToolUse: { modules: [moduleFile("./exit-plan-mode.ts"), moduleFile("./mcp-evidence.ts")], budgetMs: QUICK_BUDGET_MS },
   SubagentStart: { modules: [moduleFile("./subagent-start.ts")], budgetMs: QUICK_BUDGET_MS },
   SubagentStop: { modules: [moduleFile("./subagent-stop.ts")], budgetMs: GATE_BUDGET_MS },
-  Stop: { modules: [moduleFile("./stop.ts")], budgetMs: GATE_BUDGET_MS },
+  Stop: { modules: [moduleFile("./setup-nudge.ts"), moduleFile("./stop.ts")], budgetMs: GATE_BUDGET_MS },
   SessionEnd: { modules: [moduleFile("./session-end.ts")], budgetMs: QUICK_BUDGET_MS },
 };
