@@ -16,7 +16,7 @@ import { missingNames } from "../contract.ts";
 import { buildPlanBrief, evidenceFor, parsePlanVerdict, readMcpText, siblings, type PlanCheckStatus } from "../evidence.ts";
 import { manifestPath, pluginDataDir, sessionStatePath, type Env } from "../paths.ts";
 import { parsePlan } from "../plan.ts";
-import type { Manifest, Plan, PreToolUseOutput, SubagentStopInput, Task } from "../types.ts";
+import type { Decision, Manifest, Plan, PreToolUseOutput, SubagentStopInput, Task } from "../types.ts";
 import type { HookContext, HookModule } from "./dispatch.ts";
 
 const TOOL = "ExitPlanMode";
@@ -76,7 +76,8 @@ export function taskFor(plan: Plan, current: Task | undefined, planFilePath: str
 /**
  * Problems that keep a parsed plan from reaching the user, each written for the model as an instruction.
  * Checks: seams and interface present, seam test files listed in `files`, spec files exist, every interface name
- * appears in the evidence, every decision cites a source that exists (an ADR, a spec, the ticket or a repo file).
+ * appears in the evidence or in a decision's answer, every decision cites a source that exists (an ADR, a spec, the
+ * ticket or a repo file) or an ADR still to be written: a `docs/adr/` path listed in `files`, with the user's answer.
  */
 export async function planProblems(root: string, plan: Plan, evidence: string): Promise<string[]> {
   const problems: string[] = [];
@@ -90,39 +91,47 @@ export async function planProblems(root: string, plan: Plan, evidence: string): 
     if (!abs || !(await exists(abs))) problems.push(`spec ${spec} does not exist in the repo. List only spec files that exist (repo-relative), or remove the entry.`);
   }
 
+  // Names the user accepted through AskUserQuestion live in the decisions' answers.
+  const named = [evidence, ...plan.decisions.filter((d) => d.answer).map((d) => `${d.question}\n${d.answer}`)].join("\n");
   const invented: string[] = [];
   for (const entry of plan.interface) {
     const abs = inRepo(root, entry.file);
     const isNew = !abs || !(await exists(abs));
-    const missing = missingNames(entry, evidence, isNew);
+    const missing = missingNames(entry, named, isNew);
     if (missing.length) invented.push(`${entry.file}: ${missing.join(", ")}`);
   }
   if (invented.length) {
     problems.push(
       [
-        "These interface names appear in no evidence (ticket text read through its MCP tool, the spec files, or the files cited as interface[].source):",
+        "These interface names appear in no evidence (ticket text read through its MCP tool, the spec files, the files cited as interface[].source, or a decision's answer):",
         ...invented.map((line) => `  - ${line}`),
-        `  If the ticket or an existing file defines them, read it (the ticket through its MCP tool) and cite it in interface[].source. Otherwise nobody defined them: ask the user with AskUserQuestion whether to accept these names (offer your proposal and let them rename), write the answer as an ADR in ${ADR_DIR}/NNNN-<slug>.md that lists the accepted names, set interface[].source to that ADR path, and add a decision {"question": "Interface names", "options": [...], "answer": "<the user's answer>", "source": "<the ADR path>"}.`,
+        `  If the ticket or an existing file defines them, read it (the ticket through its MCP tool) and cite it in interface[].source. Otherwise nobody defined them: ask the user with AskUserQuestion whether to accept these names (offer your proposal first and let them rename), then add a decision {"question": "Interface names", "options": [...], "answer": "<the accepted names, written out>", "source": "${ADR_DIR}/<next number>-<slug>.md"} and list that ADR path in files (plan mode cannot write it; the implementer writes it).`,
       ].join("\n"),
     );
   }
 
   for (const d of plan.decisions) {
-    if (await sourceSettles(root, plan, d.source)) continue;
+    if (await decisionSettled(root, plan, d)) continue;
     problems.push(
-      `decision "${d.question}": its source "${d.source}" is not the ticket key nor a file in the repo, so the decision is not settled. Ask the user this question with AskUserQuestion (options: ${d.options.length ? d.options.join(" | ") : "your proposal"}), write the answer as an ADR in ${ADR_DIR}/NNNN-<slug>.md (context, decision, consequences), then set answer to the user's answer and source to the ADR path. If a spec, the ticket or an existing file already settles it, cite that instead.`,
+      `decision "${d.question}": its source "${d.source}" is not the ticket key, a file in the repo, nor a new ADR under ${ADR_DIR}/ listed in files with the user's answer, so the decision is not settled. If a spec, the ticket or an existing file settles it, cite that in source. Otherwise ask the user this question with AskUserQuestion (options: ${d.options.length ? d.options.join(" | ") : "your proposal"}), put the user's answer in answer, set source to the ADR to be added (${ADR_DIR}/<next number>-<slug>.md) and list that same path in files: plan mode cannot write the ADR now, so the implementer writes it with the question, the options and the answer.`,
     );
   }
   return problems;
 }
 
-/** A decision's source settles it when it is the plan's ticket key or an existing repo file (an `#anchor` is ignored). */
-async function sourceSettles(root: string, plan: Plan, source: string): Promise<boolean> {
-  if (plan.ticket && source.trim().toLowerCase() === plan.ticket.toLowerCase()) return true;
-  const file = source.split("#")[0]?.trim();
+/**
+ * A decision is settled when its source is the plan's ticket key, an existing repo file (an `#anchor` is ignored), or
+ * an ADR still to be written: a path under `docs/adr/` listed in `files`, with the user's answer in `answer`.
+ */
+async function decisionSettled(root: string, plan: Plan, d: Decision): Promise<boolean> {
+  if (plan.ticket && d.source.trim().toLowerCase() === plan.ticket.toLowerCase()) return true;
+  const file = d.source.split("#")[0]?.trim();
   if (!file) return false;
   const abs = inRepo(root, file);
-  return !!abs && abs !== path.resolve(root) && (await exists(abs));
+  if (!abs || abs === path.resolve(root)) return false;
+  if (await exists(abs)) return true;
+  const rel = path.relative(root, abs).split(path.sep).join("/");
+  return rel.startsWith(`${ADR_DIR}/`) && inFiles(plan, rel) && !!d.answer;
 }
 
 const deny = (reason: string): PreToolUseOutput => ({

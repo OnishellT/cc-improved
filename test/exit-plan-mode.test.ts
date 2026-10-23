@@ -110,9 +110,42 @@ test("a decision whose source does not exist is sent back to the user; the ticke
   const reason = reasonOf(out);
   assert.match(reason, /decision "Round or truncate\?"/);
   assert.match(reason, /AskUserQuestion \(options: round \| truncate\)/);
-  assert.match(reason, /ADR in docs\/adr\//);
+  assert.match(reason, /set source to the ADR to be added \(docs\/adr\/<next number>-<slug>\.md\) and list that same path in files/);
+  assert.doesNotMatch(reason, /write the answer as an ADR/);
   const ok = await pre(env, goodPlan({ ticket: "PAY-1", decisions: [{ question: "Round?", options: [], source: "pay-1" }] }));
   assert.doesNotMatch(reasonOf(ok), /decision "/);
+});
+
+test("a decision citing an ADR still to be written passes only when the ADR is listed in files and has an answer", async () => {
+  const { env, root } = await project();
+  const adr = "docs/adr/0007-rounding.md";
+  const decision = { question: "Round how?", options: ["half-even", "half-up"], answer: "half-even", source: adr };
+  const listed = await pre(env, goodPlan({ files: [...goodPlan().files, adr], decisions: [decision] }));
+  assert.doesNotMatch(reasonOf(listed), /decision "/);
+  assert.match(reasonOf(listed), /cc-improved:plan-check/);
+  assert.equal((await readTask(root)).plan?.decisions[0]?.source, adr);
+  const dirEntry = await pre(env, goodPlan({ files: [...goodPlan().files, "docs/adr/"], decisions: [decision] }));
+  assert.doesNotMatch(reasonOf(dirEntry), /decision "/);
+  const unlisted = await pre(env, goodPlan({ decisions: [decision] }));
+  assert.match(reasonOf(unlisted), /decision "Round how\?"/);
+  const { answer: _, ...unanswered } = decision;
+  const noAnswer = await pre(env, goodPlan({ files: [...goodPlan().files, adr], decisions: [unanswered] }));
+  assert.match(reasonOf(noAnswer), /decision "Round how\?"/);
+  const outside = await pre(env, goodPlan({ files: [...goodPlan().files, "docs/notes/rounding.md"], decisions: [{ ...decision, source: "docs/notes/rounding.md" }] }));
+  assert.match(reasonOf(outside), /decision "Round how\?"/);
+});
+
+test("interface names the user accepted in a decision's answer count as evidence", async () => {
+  const { env } = await project();
+  const adr = "docs/adr/0008-interface-names.md";
+  const plan = goodPlan({
+    files: ["src/minus.ts", "test/a.test.js", adr],
+    interface: [{ file: "src/minus.ts", exports: ["minusOp"], source: adr }],
+    decisions: [{ question: "Interface names", options: ["minusOp in src/minus.ts"], answer: "minusOp in src/minus.ts", source: adr }],
+  });
+  const out = await pre(env, plan);
+  assert.doesNotMatch(reasonOf(out), /appear in no evidence/);
+  assert.match(reasonOf(out), /cc-improved:plan-check/);
 });
 
 test("structure: seam test files must be listed in files, spec files must exist", async () => {
