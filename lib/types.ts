@@ -140,6 +140,40 @@ export interface SessionState {
   planChecks: number;
   /** ISO 8601 time of the last write. */
   updatedAt: string;
+  // Optional, written by the Stop/SubagentStop gates (lib/hooks/gate.ts). Absent means "not yet".
+  /** `prompt_id` the per-prompt counters (`retries`, `failures`, `setupNudges`, `lastBlock`) belong to; a new prompt resets them. */
+  promptId?: string | undefined;
+  /** Pushes back to work while `setup` is `running`, since the last user prompt (at most 2). */
+  setupNudges?: number | undefined;
+  /** Task id the per-task fields belong to; another task resets them. */
+  taskId?: string | undefined;
+  /** Gate counters per subagent, keyed by `agent_id`: `stop_hook_active` cannot count retries (spike 0.3). */
+  agents?: Record<string, AgentGateState> | undefined;
+  /** Last `VERDICT:` of plan-check on the current task. */
+  planVerdict?: Verdict | undefined;
+  /** Last `VERDICT:` of the diff reviewer on the current task. */
+  reviewVerdict?: Verdict | undefined;
+  /** What the orchestrator's last Stop block asked for, so the same request is not repeated in a loop. */
+  lastBlock?: string | undefined;
+  /** Fingerprint of the working copy when verify last passed in the orchestrator's Stop; unchanged means no rerun. */
+  verifiedFingerprint?: string | undefined;
+}
+
+/** Verdict line a strong-model checker ends with: `VERDICT: OK` or `VERDICT: FIX`. */
+export type Verdict = "OK" | "FIX";
+
+/** Gate state of one implementer or fixer run (one `agent_id`). */
+export interface AgentGateState {
+  /** Role without plugin prefix or model suffix: "implementer", "fixer", "reviewer", "plan-check". */
+  role: string;
+  /** Blocks spent on a missing interface contract. */
+  contractBlocks: number;
+  /** Consecutive verify failures: 1 fix, 2 diagnose, 3 released with FAILED. */
+  failures: number;
+  /** Blocks spent on agentlint (policy) failures; the second one goes to the person, not to a smarter model. */
+  policyBlocks: number;
+  /** Set when the gate last let the agent out: passed, or failed (escalate). */
+  outcome?: "passed" | "failed" | undefined;
 }
 
 // ---------------------------------------------------------------------------
