@@ -122,8 +122,11 @@ test("a module that exists but fails to load is logged, not skipped in silence",
   assert.match(await logText(env), /nowhere\.ts/);
 });
 
-test("the real registry with no handlers written yet stays quiet for every fixture", async () => {
+test("the real registry stays quiet for every fixture when setup was declined and there is no task", async () => {
   const env = await sandbox();
+  // SessionStart offers /setup when the manifest is missing; a declined setup keeps it quiet.
+  await mkdir(path.join(env.CLAUDE_PROJECT_DIR, ".claude"), { recursive: true });
+  await writeFile(path.join(env.CLAUDE_PROJECT_DIR, ".claude/workflow.json"), JSON.stringify({ version: 1, setup: "declined", verify: [], connectors: [] }));
   for (const [file, raw] of await fixtures()) assert.equal(await dispatch(raw, { env }), "", file);
 });
 
