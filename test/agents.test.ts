@@ -127,3 +127,10 @@ test("each sonnet variant differs from its opus agent only in name, description 
     assert.deepEqual(rest(variant), rest(base), `${variant.file}: frontmatter must match ${base.file}`);
   }
 });
+
+test("implementer, fixer and reviewer are told to use the project's verification tools from the brief", async () => {
+  for (const [id, a] of await loadAgents()) {
+    if (id.startsWith("plan-check")) continue;
+    assert.match(a.body, /use the project's verification tools listed in the brief/i, `${a.file}: verification tools`);
+  }
+});

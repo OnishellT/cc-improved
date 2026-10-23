@@ -19,7 +19,7 @@ Reuse their decisions and look at the files they touched. Speak Spanish to the u
 ## 1. Before planning
 
 1. If the request is empty, tell the user: "Uso: `/task <TICKET-123 | descripción | ruta/spec.md>`". Stop.
-2. Read `.claude/workflow.json` (the manifest). If it is missing or `setup` is not `"done"`, tell the user to run `/setup` first and stop. Keep its `verify` list and its `connectors`: you need both below.
+2. Read `.claude/workflow.json` (the manifest). If it is missing or `setup` is not `"done"`, tell the user to run `/setup` first and stop. Keep its `verify` list, its `connectors` and its `tools`: you need them below.
 3. Read `.claude/workflow/task.json` if it exists.
    - If the request is exactly `cancel`: delete that file (`rm -f .claude/workflow/task.json`), tell the user the task was cancelled and stop.
    - If its `status` is `planning` or `implementing`, ask with AskUserQuestion: continue that task (recommended), replace it, or stop. To replace, delete the file and go on. To continue an `implementing` task, skip to section 5 with the plan stored in the file.
@@ -33,7 +33,7 @@ Call EnterPlanMode now, before reading anything. Until the user approves, you on
 
 1. **Ticket.** If there is a ticket key and the manifest lists a connector, its tools are `mcp__<server>__<tool>` (deferred: load them with ToolSearch). Read the ticket in full, acceptance criteria included. Read only: never comment on, transition or edit a ticket. Without a connector, work from the request and say so in the plan. What you read through MCP is the evidence the plan gate checks names against.
 2. **Specs.** Read every spec file named in the request in full.
-3. **Project docs.** `CLAUDE.md`, `GLOSSARY.md` if present, the project skills in `.claude/skills/` that relate to the task, and the ADRs in `docs/adr/` that relate to it.
+3. **Project docs.** `CLAUDE.md`, `GLOSSARY.md` if present, the project skills in `.claude/skills/` that relate to the task, and the ADRs in `docs/adr/` that relate to it. Always read the **Tools** section of `.claude/skills/verify-app/SKILL.md`: the project's verification tools (one per manifest `tools` entry), with their exact commands, when to use each and what their output means. Pick the ones that can prove this task works.
 4. **Code.** The files you will touch and the code around them, including the files next to them: their names, exports and argument shapes are the convention to follow.
 
 ## 4. Write the plan
@@ -106,13 +106,18 @@ Rules for the block:
    Verification commands (from .claude/workflow.json, run in order from the repo root):
    - <each verify command, verbatim>
 
+   Project verification tools available (from .claude/skills/verify-app/SKILL.md; run them from the repo root to check your work before you finish):
+   - <tool name>: `<exact command from the skill>` - <when to use it; what its output means; what must be running first>
+
    First write the tests at the seams in the listed test files and run only those to see them fail; then implement until they pass. Touch only the listed files and keep the interface names exactly.
    ```
+
+   The agents cannot ask anyone and read no skill on their own: the tools section is the only way they learn the project's tools. Copy each relevant tool's command verbatim from the skill. When the manifest has no `tools`, write `- none` under that heading.
 
 4. Read the last line of its answer:
    - `DONE`: tell the user what changed and that verification passed, and ask them to check it and close the task with `/done`. Do not run `/done` yourself.
    - `BLOCKED: <question>`: ask the user with AskUserQuestion (the options from that line, recommended first), then launch the implementer again with the same brief plus `Answer from the user: <answer>`.
    - `FAILED: <report>`: launch the fixer the same way (foreground, the same brief plus the failure report). If the fixer also ends with `FAILED` or `BLOCKED`, tell the user what fails and ask how to go on.
-5. When a hook asks for a review, launch the reviewer it names in the foreground with the brief it describes. On `VERDICT: FIX`, launch the implementer again with the same brief plus the numbered findings.
+5. When a hook asks for a review, launch the reviewer it names in the foreground with the brief it describes, plus the tools section of the implementer brief and what the implementer reported from those tools. On `VERDICT: FIX`, launch the implementer again with the same brief plus the numbered findings.
 
 Strong-model agents (`cc-improved:plan-check`, `cc-improved:reviewer`, `cc-improved:fixer`) come in two variants. The configured strong model is `${user_config.strong_model}`. If that value still starts with `${`, the option is not set: use the default variant and do not pass `model`. If it is `sonnet`, use the `-sonnet` variant (for example `cc-improved:reviewer-sonnet`). If it is `opus`, use the default variant. Any other value: use the default variant and pass that value as `model`.

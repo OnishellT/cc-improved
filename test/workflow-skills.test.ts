@@ -101,3 +101,12 @@ test("skill done: reports the script's outcome and runs the retro only when it i
   assert.match(body, /maintain-verification-skill/);
   assert.match(body, /Never write them without the user's approval/);
 });
+
+test("skill task: the implementer brief lists the project's verification tools from the verify-app skill", async () => {
+  const { body } = await load("task");
+  assert.match(body, /Keep its `verify` list, its `connectors` and its `tools`/);
+  assert.match(body, /\*\*Tools\*\* section of `\.claude\/skills\/verify-app\/SKILL\.md`/);
+  const brief = /```\n\s*Task: <title>[\s\S]*?```/.exec(body)?.[0] ?? "";
+  assert.match(brief, /Project verification tools available \(from \.claude\/skills\/verify-app\/SKILL\.md/);
+  assert.match(brief, /`<exact command from the skill>`/);
+});

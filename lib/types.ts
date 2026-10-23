@@ -28,6 +28,21 @@ export interface Connector {
   server?: string;
 }
 
+/** Runtime a project verification tool declares: a python 3 stdlib script, or a script whose nix env pins its dependencies. */
+export type ToolRuntime = "python" | "nix";
+
+/**
+ * A verification tool `/setup` wrote inside the project. The plugin ships none: each one is generated for the repo.
+ * `wf-setup-finish` checks it exists, is executable and answers `--help`; `/wf-doctor` checks its runtime is installed.
+ */
+export interface VerifyTool {
+  /** Repo-relative executable script. */
+  path: string;
+  runtime: ToolRuntime;
+  /** nix only: repo-relative `shell.nix` or `flake.nix` next to the script that pins its dependencies. */
+  env?: string;
+}
+
 /** Project state committed to the repo at `.claude/workflow.json`. */
 export interface Manifest {
   version: 1;
@@ -39,6 +54,8 @@ export interface Manifest {
   completedAt?: string;
   /** Shell commands run in order from the project root; all must exit 0. The only source of verification commands. */
   verify: string[];
+  /** Verification tools generated for this project and referenced by `.claude/skills/verify-app/SKILL.md`. */
+  tools?: VerifyTool[];
   review?: ReviewPolicy;
   connectors: Connector[];
   /** agentlint command prefix when the project enforces agentlint rules, e.g. "pnpm agentlint". */
