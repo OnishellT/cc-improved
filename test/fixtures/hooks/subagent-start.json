@@ -1,0 +1,9 @@
+{
+  "session_id": "185b8104-065e-43cc-a5b6-8b821bdffbb9",
+  "transcript_path": "/home/dev/.claude/projects/-home-dev--cache-workstation-tmp-claude-1000--home-dev-projects-pi-improved-60c7d9d9-08e1-4624-88c4-90f0c99e5ab2-scratchpad-cc-lab/185b8104-065e-43cc-a5b6-8b821bdffbb9.jsonl",
+  "cwd": "/home/dev/.cache/workstation-tmp/claude-1000/-home-dev-projects-pi-improved/60c7d9d9-08e1-4624-88c4-90f0c99e5ab2/scratchpad/cc-lab",
+  "prompt_id": "d31974d6-9831-48f8-8d97-c18fe8776f85",
+  "agent_id": "aa61205ac84a406de",
+  "agent_type": "echoer",
+  "hook_event_name": "SubagentStart"
+}
