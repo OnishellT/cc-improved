@@ -27,7 +27,7 @@ export async function setupState(root: string): Promise<SetupState> {
 
 /** The one-line note when setup is done: both ways of working, without pushing either. */
 export const MODES_NOTE =
-  "Modos de uso: solo con lo que dejó /setup (CLAUDE.md, skills, herramientas de verificación), o /task con gates y revisión para tareas de riesgo.";
+  "Two ways to work here: rely on what /setup produced (CLAUDE.md, project skills, verification tools), or use /task with gates and review for risky tasks; mention this to the user in Spanish only if relevant.";
 
 /** The setup note for the model: the modes line when done, `undefined` when declined. */
 export function setupNote(state: SetupState): string | undefined {

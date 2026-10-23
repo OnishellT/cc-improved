@@ -58,7 +58,7 @@ En la eval, el modelo barato con `/setup` (D0s) sacó 343 tests ocultos por $0.7
 | D1 | plugin completo, sin setup | 337 | $2.41 | $2.41 |
 | D1v2 | plugin completo, con `/setup` | 333 | $2.12 | $2.61 |
 
-Cómo leerlo: **n=1 por celda y un solo repositorio** (`thereelcapital`, 5 tareas, variantes ciega y con pista), así que diferencias de unos pocos tests o de unos centavos están dentro del ruido. Lo medido es solo "tests ocultos por dólar"; no mide lo que aportan los gates, la revisión o los bloqueos. El coste con setup reparte lo que costaron los 7 setups ($4.94 en total) entre 10 tareas. Detalle en [`docs/EVAL.md`](docs/EVAL.md) (eval v2, issue #73).
+Cómo leerlo: esta es la **eval v2** (con setup previo y otro conjunto de tests ocultos, 436 en total); la tabla de «Resultados de la eval» más abajo es la v1 y no es comparable. **n=1 por celda y un solo repositorio** (`thereelcapital`, 5 tareas, variantes ciega y con pista), así que diferencias de unos pocos tests o de unos centavos están dentro del ruido. Lo medido es solo "tests ocultos por dólar"; no mide lo que aportan los gates, la revisión o los bloqueos. El coste con setup reparte lo que costaron los 7 setups ($4.94 en total) entre 10 tareas. Detalle en [`docs/EVAL.md`](docs/EVAL.md) (eval v2, issue #73).
 
 Con estos datos **no se puede afirmar** que el flujo completo mejore la calidad, ni que `/setup` por sí solo la mejore: la única mejora clara de D0s (con pista, 183 frente a 162) viene casi toda de un ticket. Lo que sí se vio es que el flujo completo costó unas 8 veces más en ejecución que D0s sin dar más tests. Hay que repetir con varias ejecuciones por celda y más repos antes de concluir algo más fino.
 
@@ -90,7 +90,7 @@ El modelo del frontmatter de un agent no admite `${user_config.*}` (spike 0.4), 
 
 ## Resultados de la eval
 
-Detalle y matices en [`docs/EVAL.md`](docs/EVAL.md) (issue #28, 5 tareas de un repo real, una ejecución por celda). Resumen: Claude Code con cc-improved (D1) frente a Claude Code sin plugin (D0) y frente a pi-improved (C+).
+**Eval v1** (sin setup previo; el conjunto de tests ocultos y las tareas no son los de la eval v2 de la sección «Dos modos de uso», así que los totales no son comparables entre ambas tablas). Detalle y matices en [`docs/EVAL.md`](docs/EVAL.md) (issue #28, 5 tareas de un repo real, una ejecución por celda). Resumen: Claude Code con cc-improved (D1) frente a Claude Code sin plugin (D0) y frente a pi-improved (C+).
 
 | | Tests ocultos (ciega) | Tests ocultos (con pista de interfaz) | Coste (ciega / con pista) |
 |---|---|---|---|

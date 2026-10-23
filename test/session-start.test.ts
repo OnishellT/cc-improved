@@ -48,7 +48,7 @@ test("setupState reads the manifest: missing, each status, and unreadable for ba
 
 test("setupNote: one line with both modes when done, quiet when declined; otherwise offers /setup without running it", () => {
   assert.equal(setupNote("done"), MODES_NOTE);
-  assert.ok(!MODES_NOTE.includes("\n") && MODES_NOTE.length < 200);
+  assert.ok(!MODES_NOTE.includes("\n") && MODES_NOTE.length < 300);
   assert.match(MODES_NOTE, /\/setup.*\/task/);
   assert.equal(setupNote("declined"), undefined);
   for (const s of ["missing", "pending", "running", "unreadable"] as const) assert.match(setupNote(s) ?? "", /\/setup/);
