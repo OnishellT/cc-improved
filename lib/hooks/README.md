@@ -16,13 +16,13 @@ El flag no hace nada desde Node 22.18, pero las 22.x anteriores lo necesitan par
 
    | Evento | Módulos, en orden | Issue |
    |---|---|---|
-   | `SessionStart` | `session-start.ts` | #21 |
+   | `SessionStart` | `session-start.ts` (contexto de la tarea y del setup) | #21 |
    | `UserPromptSubmit` | `user-prompt-submit.ts` | sin issue |
    | `PreToolUse` | `exit-plan-mode.ts`, `pre-tool-use.ts` | #19, #18 |
-   | `PostToolUse` | `exit-plan-mode.ts`, `mcp-evidence.ts` | #19, #21 |
-   | `SubagentStart` | `subagent-start.ts` | #21 |
+   | `PostToolUse` | `exit-plan-mode.ts`, `mcp-evidence.ts` (guarda el texto MCP como evidencia) | #19, #21 |
+   | `SubagentStart` | `subagent-start.ts` (contexto para el subagente) | #21 |
    | `SubagentStop` | `subagent-stop.ts` | #20 (y el veredicto de `plan-check` de #19) |
-   | `Stop` | `stop.ts` | #20 |
+   | `Stop` | `setup-nudge.ts`, `stop.ts` | #20 (el empujón de `/setup` en curso) |
    | `SessionEnd` | `session-end.ts` | sin issue |
 
    Si necesitas otro módulo o cambiar el orden, edita `REGISTRY` y dilo en la PR.

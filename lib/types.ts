@@ -336,12 +336,20 @@ export interface AgentToolInput {
   prompt: string;
   subagent_type?: string;
   model?: string;
+  run_in_background?: boolean;
 }
 
-/** ExitPlanMode as documented: the plan Markdown and its file. Not yet seen in the lab (spike 0.1). */
+/** ExitPlanMode `tool_input` in PreToolUse and PermissionRequest: the plan Markdown and its file (seen in spike 0.1). In PostToolUse it is `{}`; see `ExitPlanModeToolResponse`. */
 export interface ExitPlanModeToolInput {
   plan?: string;
   planFilePath?: string;
+}
+
+/** ExitPlanMode `tool_response` in PostToolUse once the plan is approved (seen in spike 0.1). */
+export interface ExitPlanModeToolResponse {
+  plan?: string;
+  filePath?: string;
+  isAgent?: boolean;
 }
 
 // ---------------------------------------------------------------------------

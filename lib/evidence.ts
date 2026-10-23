@@ -67,11 +67,12 @@ const inside = (root: string, rel: string) => {
 };
 
 /**
- * Everything the interface names can be checked against: title, ticket key, MCP text, spec files and the
+ * Everything the interface names can be checked against: ticket key, MCP text, spec files and the
  * existing files cited as `source` by the plan. Unreadable or out-of-repo files count as empty.
+ * The title is not evidence: the model writes it, so a name invented there would pass the names gate.
  */
 export async function evidenceFor(root: string, task: Task, mcpText = ""): Promise<string> {
-  const parts = [task.title, ...(task.ticket ? [task.ticket] : []), mcpText];
+  const parts = [...(task.ticket ? [task.ticket] : []), mcpText];
   const plan = task.plan;
   const cited = (plan?.interface ?? []).map((i) => i.source).filter((s): s is string => !!s);
   for (const rel of new Set([...(plan?.spec ?? []), ...cited])) {

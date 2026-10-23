@@ -64,15 +64,17 @@ test("captureMcpText accumulates per session under CLAUDE_PLUGIN_DATA and caps t
   await assert.rejects(captureMcpText("../x", "t", env), /Invalid session_id/);
 });
 
-test("evidenceFor joins title, ticket, MCP text, specs and cited files; ignores unreadable and out-of-repo paths", async () => {
+test("evidenceFor joins ticket, MCP text, specs and cited files; ignores unreadable and out-of-repo paths", async () => {
   const root = await tmp();
   await fs.mkdir(path.join(root, "docs"));
   await fs.writeFile(path.join(root, "docs/spec.md"), "SPEC exportInvoicesCsv");
   await fs.writeFile(path.join(root, "docs/cited.md"), "CITED helperName");
   const t: Task = { ...task, plan: { ...plan, spec: ["docs/spec.md", "docs/missing.md", "../outside.md"], interface: [{ file: "a.ts", exports: ["a"], source: "docs/cited.md" }, { file: "b.ts", exports: ["b"], source: "ticket" }] } };
   const text = await evidenceFor(root, t, "MCP stopLevel");
-  for (const part of ["Stop levels", "PAY-1", "MCP stopLevel", "SPEC exportInvoicesCsv", "CITED helperName"]) assert.ok(text.includes(part), part);
-  assert.equal(await evidenceFor(root, { ...task, ticket: undefined as never }, ""), "Stop levels");
+  assert.ok(!text.includes("Stop levels"), "the title is not evidence");
+  for (const part of ["PAY-1", "MCP stopLevel", "SPEC exportInvoicesCsv", "CITED helperName"]) assert.ok(text.includes(part), part);
+  assert.equal(await evidenceFor(root, { ...task, ticket: undefined as never }, ""), "");
+  assert.equal(await evidenceFor(root, { ...task, title: "slugify invented", ticket: undefined as never }, ""), "");
 });
 
 test("brief carries the evidence, the plan and the sibling files; evidence is truncated to a fixed size", async () => {
