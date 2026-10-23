@@ -92,6 +92,10 @@ test("always forces and never disables", async () => {
   assert.equal((await risk([["package.json", 900]], task, { ...base, review: { never: true } })).review, false);
 });
 
+test("always wins over never", async () => {
+  assert.deepEqual(await risk([], task, { ...base, review: { always: true, never: true } }), { review: true, reasons: ["review.always"] });
+});
+
 test("git failures degrade to no diff", async () => {
   const notRepo = fs.mkdtempSync(path.join(os.tmpdir(), "risk-nogit-"));
   assert.equal((await assessRisk(notRepo, task, base)).review, false);

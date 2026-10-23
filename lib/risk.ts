@@ -33,8 +33,9 @@ const git = (root: string, args: string[]): Promise<string> =>
 /** Whether the diff needs the paid strong-model review. Cheap: git and regexes, no LLM. */
 export async function assessRisk(root: string, task: Task | undefined, manifest: Manifest): Promise<{ review: boolean; reasons: string[] }> {
   const rule = manifest.review;
-  if (rule?.never) return { review: false, reasons: ["review.never"] };
+  // `always` wins over `never` (see ReviewPolicy in types.ts).
   if (rule?.always) return { review: true, reasons: ["review.always"] };
+  if (rule?.never) return { review: false, reasons: ["review.never"] };
 
   const lines = new Map<string, number>();
   for (const row of (await git(root, ["diff", "HEAD", "--numstat"])).split("\n")) {
