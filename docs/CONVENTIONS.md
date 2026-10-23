@@ -2,6 +2,7 @@
 
 - Un issue por PR; la rama se llama `issue-<n>-<slug>`; el PR empieza con `Closes #<n>`.
 - Squash merge, historia lineal, rama borrada al mergear. Nadie pushea a `main`.
+- La revisión de cada PR es local (ver `docs/DECISIONS.md`, D-001): un subagente revisor independiente, de solo lectura, comenta en la PR; el orquestador publica el estado `claude-review` en el commit solo si el veredicto es LGTM. Antes de pedir revisión, `npm test`, `npm run typecheck` y `claude plugin validate .` pasan en local.
 - Cada commit termina con `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`.
 - `lib/` no importa nada del harness: solo Node y sus propios módulos. Lo que depende de Claude Code vive en `bin/`, `hooks/`, `skills/`, `agents/`, `mod/`.
 - Agnóstico de lenguaje: ningún comando de verificación fijo; todo sale de `.claude/workflow.json`. Lo que el código comprueba lo hace sobre texto plano.
