@@ -1,9 +1,10 @@
-# Vendored method skills
+# Skills de método vendorizadas
 
-Skills the model loads on its own (`user-invocable: false`; they do not show in `/`). Agents name them in `skills:` (for example `tdd`, `blast-radius`).
+Skills que el modelo carga por su cuenta (`user-invocable: false`: no aparecen en `/`). Los agents las nombran en `skills:` (por ejemplo `tdd`, `blast-radius`). El texto de cada `SKILL.md` está en inglés porque es un prompt para el modelo.
 
-- mattpocock/skills @ 5beb35b040e3 (MIT, see `LICENSE-mattpocock`): grilling, domain-modeling, tdd, diagnosing-bugs, retro
-- pstack (MIT, Lauren Tan, see `LICENSE-pstack`): technical-writing, create-verification-skill, maintain-verification-skill, blast-radius (renamed without the `pstack-` prefix)
+- mattpocock/skills @ 5beb35b040e3 (MIT, ver `LICENSE-mattpocock`): grilling, domain-modeling, tdd, diagnosing-bugs, retro.
+- pstack (MIT, Lauren Tan, ver `LICENSE-pstack`): technical-writing, create-verification-skill, maintain-verification-skill, blast-radius (sin el prefijo `pstack-`).
 
-Language-agnostic: no skill hardcodes a verification command; they refer to the verify commands of the manifest (`.claude/workflow.json`).
-Update by re-copying from the source and re-applying the Claude Code adaptations.
+Agnósticas de lenguaje: ninguna fija un comando de verificación; se remiten a los comandos de verify del manifest (`.claude/workflow.json`).
+
+Para actualizarlas, vuelve a copiarlas del origen y reaplica las adaptaciones a Claude Code.
