@@ -1,0 +1,20 @@
+{
+  "session_id": "e7119218-ed8d-4fd7-85e4-a2bb49b7547a",
+  "transcript_path": "/home/dev/.claude/projects/-home-dev--cache-workstation-tmp-claude-1000-spikes-work-issue-3-sdk-host-repo/e7119218-ed8d-4fd7-85e4-a2bb49b7547a.jsonl",
+  "cwd": "/home/dev/.cache/workstation-tmp/claude-1000/spikes-work/issue-3/sdk-host/repo",
+  "prompt_id": "de175abb-b3ca-45e6-95aa-61d11f6c438d",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "ExitPlanMode",
+  "tool_input": {},
+  "tool_response": {
+    "plan": "# Plan: add `sub(a,b)` to a.js\n\n## Context\na.js currently exports only `add(a,b)`. Add a matching exported `sub`.\n\n## Change\n- In `a.js`, append after line 1, matching the existing style:\n  `export function sub(a,b){return a-b}`\n\n## Verification\n- `node --input-type=module -e \"import {sub} from './a.js'; console.log(sub(5,3))\"` should print `2`.\n",
+    "isAgent": false,
+    "filePath": "/home/dev/.claude/plans/plan-how-to-add-whimsical-puppy.md"
+  },
+  "tool_use_id": "toolu_01QqZJhJidWZppDqvW1Ng2j6",
+  "duration_ms": 1
+}
