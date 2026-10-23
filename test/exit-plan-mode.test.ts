@@ -97,7 +97,7 @@ test("interface names nowhere in the evidence: deny, ask with AskUserQuestion an
 });
 
 test("names captured from the ticket through MCP count as evidence", async () => {
-  const { env } = await project();
+  const { env } = await project({ review: { planFiles: 1 } });
   await captureMcpText(SESSION, [{ type: "text", text: "PAY-9: expose minusOp from src/minus.ts" }], env);
   const out = await pre(env, goodPlan({ ticket: "PAY-9", interface: [{ file: "src/minus.ts", exports: ["minusOp"], source: "PAY-9" }], files: ["src/minus.ts", "test/a.test.js"] }));
   assert.doesNotMatch(reasonOf(out), /appear in no evidence/);
@@ -117,7 +117,7 @@ test("a decision whose source does not exist is sent back to the user; the ticke
 });
 
 test("a decision citing an ADR still to be written passes only when the ADR is listed in files and has an answer", async () => {
-  const { env, root } = await project();
+  const { env, root } = await project({ review: { planFiles: 1 } });
   const adr = "docs/adr/0007-rounding.md";
   const decision = { question: "Round how?", options: ["half-even", "half-up"], answer: "half-even", source: adr };
   const listed = await pre(env, goodPlan({ files: [...goodPlan().files, adr], decisions: [decision] }));
@@ -136,7 +136,7 @@ test("a decision citing an ADR still to be written passes only when the ADR is l
 });
 
 test("interface names the user accepted in a decision's answer count as evidence", async () => {
-  const { env } = await project();
+  const { env } = await project({ review: { planFiles: 1 } });
   const adr = "docs/adr/0008-interface-names.md";
   const plan = goodPlan({
     files: ["src/minus.ts", "test/a.test.js", adr],
@@ -158,7 +158,7 @@ test("structure: seam test files must be listed in files, spec files must exist"
 });
 
 test("a valid plan is saved as planning, then the plan check is requested once per task", async () => {
-  const { env, root } = await project();
+  const { env, root } = await project({ review: { always: true } });
   const first = await pre(env, goodPlan());
   const reason = reasonOf(first);
   assert.equal(first.hookSpecificOutput.permissionDecision, "deny");
@@ -194,7 +194,7 @@ test("review.plan false: a valid plan passes without the plan check", async () =
 });
 
 test("a new task after an implementing one gets its own plan check", async () => {
-  const { env, root } = await project();
+  const { env, root } = await project({ review: { always: true } });
   await pre(env, goodPlan());
   await writeFile(taskPath(root), JSON.stringify({ ...(await readTask(root)), status: "implementing" }));
   const out = await pre(env, goodPlan({ title: "Another task" }));
@@ -247,4 +247,57 @@ test("PostToolUse: no planning task means no opinion; an unparsable approved pla
 
 test("module shape: one handler per event it serves", () => {
   assert.deepEqual(Object.keys(mod).sort(), ["PostToolUse", "PreToolUse"]);
+});
+
+const checked = async (manifest: Partial<Manifest>, plan: Plan, env: Record<string, string> = {}) => {
+  const p = await project(manifest);
+  const out = await pre({ ...p.env, ...env }, plan);
+  return { out, planChecks: await planChecks(p.env) };
+};
+
+test("plan check threshold: a small plan without risky paths passes without it, a big one gets the cheap variant", async () => {
+  const small = await checked({}, goodPlan());
+  assert.equal(small.out, undefined);
+  assert.equal(small.planChecks, 0);
+  for (const over of [
+    { files: ["a.js", "b.js", "c.js", "d.js", "e.js", "test/a.test.js"] },
+    { interface: [1, 2, 3, 4].map((n) => ({ file: "a.js", exports: ["sub"], source: "docs/spec.md" }) as never) },
+    { decisions: [goodPlan().decisions[0]!, { ...goodPlan().decisions[0]!, question: "Second?" }] },
+  ] as Partial<Plan>[]) {
+    const big = await checked({}, goodPlan(over));
+    assert.match(reasonOf(big.out), /subagent_type "cc-improved:plan-check-sonnet"/, JSON.stringify(Object.keys(over)));
+    assert.equal(big.planChecks, 1);
+  }
+  const exactly = await checked({}, goodPlan({ files: ["a.js", "b.js", "c.js", "d.js", "test/a.test.js"] }));
+  assert.equal(exactly.out, undefined, "5 files is not over the threshold");
+});
+
+test("plan check thresholds are configurable in review", async () => {
+  const strict = await checked({ review: { planFiles: 1 } }, goodPlan());
+  assert.match(reasonOf(strict.out), /plan-check-sonnet/);
+  const lax = await checked({ review: { planFiles: 50, planInterface: 50, planDecisions: 50 } }, goodPlan({ files: ["a.js", "b.js", "c.js", "d.js", "e.js", "f.js", "test/a.test.js"] }));
+  assert.equal(lax.out, undefined);
+});
+
+test("plan check: risky paths in the plan ask for it with the strong variant, review.always too, review.plan false never", async () => {
+  for (const file of ["package.json", "db/migrate/001_x.rb", "src/auth/login.ts"]) {
+    const risky = await checked({}, goodPlan({ files: ["a.js", "test/a.test.js", file] }));
+    assert.match(reasonOf(risky.out), /subagent_type "cc-improved:plan-check", run_in_background/, file);
+  }
+  const paths = await checked({ review: { paths: ["a.js"] } }, goodPlan());
+  assert.match(reasonOf(paths.out), /subagent_type "cc-improved:plan-check", run_in_background/);
+  const always = await checked({ review: { always: true } }, goodPlan());
+  assert.match(reasonOf(always.out), /subagent_type "cc-improved:plan-check", run_in_background/);
+  const off = await checked({ review: { plan: false, always: true } }, goodPlan({ files: ["package.json", "a.js", "test/a.test.js"] }));
+  assert.equal(off.out, undefined);
+});
+
+test("plan check variant: strong_model sonnet keeps the cheap variant even when risky; another model is passed on escalation only", async () => {
+  const risky = goodPlan({ files: ["a.js", "test/a.test.js", "package.json"] });
+  const sonnet = await checked({}, risky, { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "sonnet" });
+  assert.match(reasonOf(sonnet.out), /subagent_type "cc-improved:plan-check-sonnet"/);
+  const other = await checked({}, risky, { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "claude-opus-5-5" });
+  assert.match(reasonOf(other.out), /subagent_type "cc-improved:plan-check", model "claude-opus-5-5"/);
+  const big = await checked({}, goodPlan({ files: ["a.js", "b.js", "c.js", "d.js", "e.js", "test/a.test.js"] }), { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "claude-opus-5-5" });
+  assert.match(reasonOf(big.out), /subagent_type "cc-improved:plan-check-sonnet", run_in_background/);
 });

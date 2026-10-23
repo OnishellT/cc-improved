@@ -50,17 +50,19 @@ export function role(agentType: string | undefined): string {
 /**
  * Agent (and `model` override) to launch for a strong role, following the `strong_model` user config, which reaches
  * hooks as `CLAUDE_PLUGIN_OPTION_STRONG_MODEL` (spike 0.4: two variants per role, `model:` cannot use the option).
+ * The reviewer and the plan check run on the `-sonnet` variant unless `strong` (high risk, `review.always`); the
+ * configured strong model is what `strong` escalates to. The fixer only runs after failures and always uses it.
  */
-export function strongAgentChoice(name: "reviewer" | "fixer" | "plan-check", env: Env): { agent: string; model?: string } {
+export function strongAgentChoice(name: "reviewer" | "fixer" | "plan-check", env: Env, opts: { strong?: boolean } = {}): { agent: string; model?: string } {
   const model = (env.CLAUDE_PLUGIN_OPTION_STRONG_MODEL ?? "").trim();
-  if (/sonnet/i.test(model)) return { agent: `${PLUGIN}:${name}-sonnet` };
+  if (/sonnet/i.test(model) || (name !== "fixer" && !opts.strong)) return { agent: `${PLUGIN}:${name}-sonnet` };
   if (!model || /^opus$/i.test(model) || model.includes("${")) return { agent: `${PLUGIN}:${name}` };
   return { agent: `${PLUGIN}:${name}`, model };
 }
 
 /** `strongAgentChoice` as text for the model. */
-export function strongAgent(name: "reviewer" | "fixer" | "plan-check", env: Env): string {
-  const { agent, model } = strongAgentChoice(name, env);
+export function strongAgent(name: "reviewer" | "fixer" | "plan-check", env: Env, opts: { strong?: boolean } = {}): string {
+  const { agent, model } = strongAgentChoice(name, env, opts);
   return model ? `\`${agent}\` with \`model: "${model}"\`` : `\`${agent}\``;
 }
 
