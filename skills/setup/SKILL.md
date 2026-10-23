@@ -1,6 +1,7 @@
 ---
 name: setup
 description: Prepare this repository for the workflow. Scans the repo, interviews the user, writes CLAUDE.md, GLOSSARY.md, ADRs, domain skills, the verify-app skill, portable verification tools, path rules and connectors, then validates everything and records the verify commands and tools in .claude/workflow.json.
+model: opus
 disable-model-invocation: true
 argument-hint: "[notes for the setup]"
 allowed-tools: Bash(node *), Read, Grep, Glob, Write, Edit, AskUserQuestion
@@ -22,9 +23,11 @@ The scan only detects and proposes. Every command under `candidates` was found i
 
 ## Steps
 
-1. **Start.** Ask the user, with `AskUserQuestion`, which language to use for questions and docs (offer the language of the existing docs first). Then run:
-   `node --experimental-strip-types "${CLAUDE_PLUGIN_ROOT}/bin/wf-setup-finish.mjs" --start --language "<language>"`
-   This sets `setup: "running"` in `.claude/workflow.json`. While it is `running`, the Stop hook may send you back to finish; step 9 sets it to `done` and the pushing stops. If `manifest.setup` was already `running`, you are resuming: keep what is already written and finish the rest. If it was `done`, ask the user whether to update the setup before changing anything.
+1. **Start.**
+   - **Already done?** If `manifest.setup` is `"done"`, do this before anything else: tell the user, in their language, that the setup was already done, that it runs on the large model (opus) and costs far more than a normal task, and that its results (CLAUDE.md, skills, verification tools, manifest) are reused by every task, so repeating it is rarely needed. Ask with `AskUserQuestion` whether to repeat it (first option: no, keep the current setup). If the user does not confirm, stop here: change nothing and do not run `--start`.
+   - Ask the user, with `AskUserQuestion`, which language to use for questions and docs (offer the language of the existing docs first). Then run:
+     `node --experimental-strip-types "${CLAUDE_PLUGIN_ROOT}/bin/wf-setup-finish.mjs" --start --language "<language>"`
+   This sets `setup: "running"` in `.claude/workflow.json`. While it is `running`, the Stop hook may send you back to finish; step 9 sets it to `done` and the pushing stops. If `manifest.setup` was already `running`, you are resuming: keep what is already written and finish the rest. If it was `done` and the user confirmed, update the existing files instead of starting from scratch.
 
 2. **Read.** Read the docs and agent files the scan listed (`docs`, `agentFiles`, `adrs`, `skills`, `rules`). Then explore the code: entry points, main modules, data flow, tests. Use the `subprojects` list for monorepos.
 
