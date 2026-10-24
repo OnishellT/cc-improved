@@ -2,19 +2,21 @@
 
 Cómo se midió el consumo de Claude Code en el uso diario (no en las evals de `docs/EVAL.md`), qué lo causó y qué se instaló para bajarlo. Decisión: D-016.
 
-Las cifras son estimaciones a precio de lista de API calculadas con las transcripciones locales (`usage-report.mjs`), no una factura: las cuentas son de suscripción y sus límites no son públicos. Sirven para comparar periodos.
+Las cifras son estimaciones a precio de lista de API calculadas con las transcripciones locales, no una factura: las cuentas son de suscripción y sus límites no son públicos. Sirven para comparar periodos.
 
 ## Línea base (2026-10-21 a 2026-10-23, días completos)
 
-$654,77 en tres días, unos $218 al día. Por modelo: Fable 29 %, Opus 33 %, Sonnet 37 %. Un turno de sesión principal costó $0,22 en Fable, $0,105 en Opus y $0,053 en Sonnet.
+Salvo lo marcado como «análisis aparte», las cifras de esta sección salen de `node docs/costes/usage-report.mjs --since 2026-10-21 --until 2026-10-23`.
+
+$654,77 en tres días, unos $218 al día. Por modelo: Fable 31 %, Opus 35 %, Sonnet 33 %. Un turno de sesión principal costó $0,22 en Fable, $0,106 en Opus y $0,045 en Sonnet.
 
 Qué lo causó, de mayor a menor:
 
-1. **Sesiones largas.** Un 45 % del gasto fue en turnos con más de 200k tokens de contexto. Cada turno relee todo el contexto, así que el coste crece con el cuadrado de la longitud de la sesión. Una sesión llegó a 553 turnos y 946k tokens y gastó $82 de sus $85 por encima de 200k. En total hubo 10 compactaciones.
+1. **Sesiones largas.** Un 47 % del gasto fue en turnos con más de 200k tokens de contexto. Cada turno relee todo el contexto, así que el coste crece con el cuadrado de la longitud de la sesión. Análisis aparte: una sesión llegó a 553 turnos y 946k tokens y gastó $82 de sus $85 por encima de 200k, y en total hubo 10 compactaciones.
 2. **Modelo.** Las sesiones principales arrancaron en Opus (el defecto de la suscripción); cuatro pasaron a mano a Fable (limpieza de configuración, alta de un repo, diseño).
-3. **Subagentes: el 40 % del gasto.** 242 agentes `general-purpose` costaron $271 (mediana $0,28; los de «Implement issue» costaron $5–7 con 80–119 turnos).
-4. **Reconstrucciones de caché en frío: $108.** Los subagentes cachean 5 minutos (las sesiones principales, 1 hora). Un agente que espera a CI o a una revisión más de 5 minutos reescribe todo su contexto en el turno siguiente: $65 en 247 eventos. Volver tras horas a una sesión de 400k cuesta lo mismo: $43 en 29 eventos. 25 agentes con 4 o más esperas largas pagaron $49,66.
-5. **Esfuerzo.** Los cuatro días corrieron en `medium` (Fable en `high`); `xhigh` se fijó como defecto el 2026-10-24, lo que solo puede sumar.
+3. **Subagentes: el 39 % del gasto.** 191 agentes `general-purpose` costaron $243 (mediana de todos los subagentes $0,27; los más caros, que implementan un issue entero, costaron $5–7 con 70–120 turnos).
+4. **Reconstrucciones de caché en frío: $104.** Los subagentes cachean 5 minutos (las sesiones principales, 1 hora). Un agente que espera a CI o a una revisión más de 5 minutos reescribe todo su contexto en el turno siguiente: $64 en 241 eventos. Volver a una sesión grande tras una pausa larga cuesta lo mismo: $40 en 25 eventos. Análisis aparte: 25 agentes con 4 o más esperas largas pagaron $49,66 de esos $64.
+5. **Esfuerzo.** Los tres días corrieron en `medium` (Fable en `high`); `xhigh` se fijó como defecto el 2026-10-24, lo que solo puede sumar.
 
 ## Qué se instaló
 
@@ -30,7 +32,7 @@ Notas:
 
 - `effortLevel` de primer nivel no se aplica a Opus 5.5; por eso va en `modelSettings`.
 - `CLAUDE_CODE_SUBAGENT_MODEL` no pisa un `model` pasado al lanzar el agente ni el del frontmatter, y `Explore` y `Plan` lo ignoran salvo con `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1`.
-- La caché de 1 hora va solo en el implementador. Aplicada a todos los subagentes (`subagentPromptCacheTtl`) ahorra la mitad: los 221 agentes que nunca esperan pagarían escrituras más caras para nada. Claude Code ignora `1h` mientras la suscripción usa créditos de uso.
+- La caché de 1 hora va solo en el implementador. Aplicada a todos los subagentes (`subagentPromptCacheTtl`) ahorra neto unos $31 en lugar de unos $53 (análisis aparte): los 217 agentes que nunca esperan pagarían $21 de escrituras más caras para nada. Claude Code ignora `1h` mientras la suscripción usa créditos de uso.
 - Un agente definido por archivo recibe solo su cuerpo como prompt de sistema: el contexto base baja de unos 30k a unos 16k tokens, pero pierde el prompt por defecto de Claude Code. Probarlo con un issue antes de usarlo en todos.
 - Verificado con una sesión `claude -p`: el subagente escribe la caché con TTL de 1 hora (15 896 tokens, ninguno de 5 minutos), con Sonnet y esfuerzo `medium`. **No** se verificó en vivo el compactado a 200k ni `CLAUDE_CODE_SUBAGENT_MODEL`.
 
@@ -40,7 +42,9 @@ Notas:
 node docs/costes/usage-report.mjs --since 2026-10-25
 ```
 
-Compara el total diario con los ≈$218 de la línea base. Estimaciones sobre los datos de la línea base, cada una por separado: compactar a 200k ahorra un 16 %; Fable a Opus, un 13 %; subagentes de Opus a Sonnet, un 5 %; ninguna espera de subagente de más de 5 minutos, un 9 %; ninguna reconstrucción en frío en sesiones principales, un 6 %. Combinadas sin contar dos veces: un 41 % (tope de 200k, Fable a Opus, subagentes de Opus a Sonnet, sin esperas largas) a un 47 % (con tope de 150k y sin reconstrucciones en sesiones principales). Suponen el mismo número de turnos; un modelo más barato puede necesitar más.
+Compara el total diario con los ≈$218 de la línea base.
+
+Análisis aparte (simulación que revalora los mismos tokens de la línea base; `usage-report.mjs` no la repite). Cada palanca por separado: compactar a 200k ahorra un 15 %; Fable a Opus, un 14 %; subagentes de Opus a Sonnet, un 5 %; ninguna espera de subagente de más de 5 minutos, un 10 %; ninguna reconstrucción en frío en sesiones principales, un 6 %. Combinadas sin contar dos veces: un 43 % (tope de 200k, Fable a Opus, subagentes de Opus a Sonnet, sin esperas largas) a un 48 % (con tope de 150k y sin reconstrucciones en sesiones principales). La configuración instalada solo impone una parte (el tope de contexto, el esfuerzo, el modelo de los subagentes y la caché del implementador); pasar de Fable a Opus, no dejar sesiones grandes paradas y no esperar dentro de subagentes dependen de hábitos. Suponen el mismo número de turnos; un modelo más barato puede necesitar más.
 
 ## Hábitos que la configuración no impone
 
