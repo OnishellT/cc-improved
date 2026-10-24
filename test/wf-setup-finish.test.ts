@@ -153,6 +153,23 @@ test("failing verify keeps setup running with the steps saved; the report names 
   assert.equal((await manifest(root)).setup, "done");
 });
 
+test("mode: done writes direct by default, --mode flow is kept, a bad value or a bad manifest mode is rejected", async () => {
+  const root = await project(COMPLETE);
+  assert.equal((await run(root, ["--step", "true"])).code, 0);
+  assert.equal((await manifest(root)).mode, "direct");
+  assert.equal((await run(root, ["--mode", "flow"])).code, 0);
+  assert.equal((await manifest(root)).mode, "flow");
+  assert.equal((await run(root, [])).code, 0);
+  assert.equal((await manifest(root)).mode, "flow", "a later run keeps the recorded mode");
+  const bad = await run(root, ["--mode", "fast"]);
+  assert.equal(bad.code, 2);
+  assert.match(bad.out, /--mode must be one of direct, flow/);
+  const wrong = await project({ ...COMPLETE, ".claude/workflow.json": JSON.stringify({ version: 1, setup: "pending", mode: "fast", verify: ["true"], connectors: [] }) });
+  const r = await run(wrong, []);
+  assert.equal(r.code, 1);
+  assert.match(r.out, /"mode" must be one of direct, flow/);
+});
+
 test("agentlint adds its check as the last verify step and needs its config", async () => {
   const root = await project(COMPLETE);
   const missing = await run(root, ["--step", "true", "--agentlint", "node agentlint.mjs"]);

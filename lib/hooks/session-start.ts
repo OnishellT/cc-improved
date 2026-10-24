@@ -2,7 +2,7 @@
 // `setup: "declined"` means the user opted out: no setup note. Nothing here blocks; it only adds context.
 import { readFile } from "node:fs/promises";
 import { MANIFEST_PATH, manifestPath } from "../paths.ts";
-import type { ContextOutput, SetupStatus, Task } from "../types.ts";
+import type { ContextOutput, SetupStatus, Task, WorkflowMode } from "../types.ts";
 import type { HookContext, HookModule } from "./dispatch.ts";
 
 /** What the manifest says about setup: `missing` without a file, `unreadable` when it is not a JSON object. */
@@ -25,15 +25,28 @@ export async function setupState(root: string): Promise<SetupState> {
   }
 }
 
-/** The one-line note when setup is done: both ways of working, without pushing either. */
-export const MODES_NOTE =
-  "Work directly with what /setup produced (CLAUDE.md, skills, verification tools), or use /task for gated work. Mention this to the user, in Spanish, only if relevant.";
+/** The manifest's `mode`; anything but `"flow"` (absent, unknown, unreadable) is `direct`. Never throws. */
+export async function workflowMode(root: string): Promise<WorkflowMode> {
+  try {
+    const value = JSON.parse(await readFile(manifestPath(root), "utf8")) as { mode?: unknown };
+    return value?.mode === "flow" ? "flow" : "direct";
+  } catch {
+    return "direct";
+  }
+}
 
-/** The setup note for the model: the modes line when done, `undefined` when declined. */
-export function setupNote(state: SetupState): string | undefined {
+/** Setup done, mode `direct` (default): work directly; /task stays available for risky work. Gates only run with an open task. */
+export const DIRECT_NOTE =
+  "This project works directly: do the task yourself using CLAUDE.md, the skills and the verification tools. /task (plan, gates, review) is available for risky changes.";
+
+/** Setup done, mode `flow`: /task is the recommended route. */
+export const FLOW_NOTE = "This project uses the /task flow (plan, gates, review) for its tasks. Suggest /task when the user asks for a change.";
+
+/** The setup note for the model: the mode line when done, `undefined` when declined. */
+export function setupNote(state: SetupState, mode: WorkflowMode = "direct"): string | undefined {
   switch (state) {
     case "done":
-      return MODES_NOTE;
+      return mode === "flow" ? FLOW_NOTE : DIRECT_NOTE;
     case "declined":
       return undefined;
     case "missing":
@@ -62,7 +75,8 @@ export function taskSummary(task: Task | undefined): string | undefined {
 
 export default {
   async SessionStart(_input, ctx: HookContext): Promise<ContextOutput | undefined> {
-    const parts = [setupNote(await setupState(ctx.root)), taskSummary(ctx.task)].filter((p): p is string => !!p);
+    const state = await setupState(ctx.root);
+    const parts = [setupNote(state, state === "done" ? await workflowMode(ctx.root) : "direct"), taskSummary(ctx.task)].filter((p): p is string => !!p);
     if (!parts.length) return undefined;
     return { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: parts.join("\n") } };
   },

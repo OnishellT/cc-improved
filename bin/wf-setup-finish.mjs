@@ -5,6 +5,7 @@
 //   --start                 mark `setup: "running"` (keeps existing fields); hooks keep pushing until `done`
 //   --pause                 mark `setup: "pending"` (keeps `startedAt`, so the next /setup resumes); pushing stops
 //   --step "<command>"      a verify step, repeatable, in run order (fastest first); default: the manifest's verify
+//   --mode <direct|flow>    default way of working, recorded in the manifest (default: keep the current one, else direct)
 //   --language <lang>       language of questions and docs
 //   --connector <id[:server]>  enabled connector, repeatable; `server` is its key in `.mcp.json`
 //   --agentlint "<prefix>"  agentlint command prefix when the project enforces agentlint rules
@@ -23,6 +24,8 @@ import { MANIFEST_PATH, TASKS_LOG_PATH, WORKFLOW_DIR, manifestPath, projectDir }
 /** CLAUDE.md is loaded into every session: keep it a map, details go to skills and rules. */
 export const CLAUDE_MD_MAX_LINES = 200;
 const SETUP_STATUSES = ["pending", "running", "done", "declined"];
+/** Values of `mode` in the manifest (`WorkflowMode` in lib/types.ts). */
+export const WORKFLOW_MODES = ["direct", "flow"];
 const SKILL_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const ADR_NAME = /^\d{4}-[a-z0-9][a-z0-9-]*\.md$/;
 /** Lines `.gitignore` needs: local workflow state ignored, the closed-task log committed. */
@@ -80,7 +83,10 @@ function parseArgs(argv) {
     else if (arg === "--pause") opts.pause = true;
     else if (arg === "--step") opts.steps.push(value());
     else if (arg === "--language") opts.language = value();
-    else if (arg === "--agentlint") opts.agentlint = value();
+    else if (arg === "--mode") {
+      opts.mode = value();
+      if (!WORKFLOW_MODES.includes(opts.mode)) throw new Usage(`--mode must be one of ${WORKFLOW_MODES.join(", ")}, got "${opts.mode}"`);
+    } else if (arg === "--agentlint") opts.agentlint = value();
     else if (arg === "--tool") opts.tools.push(parseTool(value()));
     else if (arg === "--connector") {
       const [id, server] = value().split(":");
@@ -124,6 +130,7 @@ export function manifestProblems(m) {
   if (!Array.isArray(m.connectors) || m.connectors.some((c) => !c || typeof c.id !== "string" || (c.server !== undefined && typeof c.server !== "string"))) {
     p.push(`${MANIFEST_PATH}: "connectors" must be a list of {"id", "server"?}.`);
   }
+  if (m.mode !== undefined && !WORKFLOW_MODES.includes(m.mode)) p.push(`${MANIFEST_PATH}: "mode" must be one of ${WORKFLOW_MODES.join(", ")}.`);
   for (const key of ["language", "startedAt", "completedAt", "agentlint"]) if (m[key] !== undefined && typeof m[key] !== "string") p.push(`${MANIFEST_PATH}: "${key}" must be a string.`);
   if (m.review !== undefined && (typeof m.review !== "object" || Array.isArray(m.review))) p.push(`${MANIFEST_PATH}: "review" must be an object.`);
   const badTool = (t) => !t || typeof t.path !== "string" || !repoPath(t.path) || !TOOL_RUNTIMES.includes(t.runtime) || (t.env !== undefined && (typeof t.env !== "string" || !repoPath(t.env)));
@@ -147,7 +154,7 @@ function saveManifest(root, manifest) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
   // Keys in the order of `Manifest` (lib/types.ts), then anything else the file already had.
-  const order = ["version", "setup", "language", "startedAt", "completedAt", "verify", "tools", "review", "connectors", "agentlint"];
+  const order = ["version", "setup", "mode", "language", "startedAt", "completedAt", "verify", "tools", "review", "connectors", "agentlint"];
   const sorted = Object.fromEntries([...order.filter((k) => k in manifest).map((k) => [k, manifest[k]]), ...Object.entries(manifest).filter(([k]) => !order.includes(k))]);
   fs.writeFileSync(tmp, `${JSON.stringify(sorted, null, 2)}\n`);
   fs.renameSync(tmp, file);
@@ -369,6 +376,7 @@ export async function main(argv, env = process.env, cwd = process.cwd()) {
     const root = projectDir(env, cwd);
     const manifest = loadManifest(root);
     if (opts.language) manifest.language = opts.language;
+    if (opts.mode) manifest.mode = opts.mode;
     if (opts.connectors.length) manifest.connectors = opts.connectors;
     if (opts.agentlint) manifest.agentlint = opts.agentlint;
     if (opts.steps.length) manifest.verify = opts.steps;
@@ -430,6 +438,7 @@ export async function main(argv, env = process.env, cwd = process.cwd()) {
 
     if (ensureIgnored(root)) say(`.gitignore: added ${IGNORE_LINES.join(", ")}`);
     manifest.setup = "done";
+    manifest.mode ??= "direct";
     manifest.completedAt = new Date().toISOString();
     saveManifest(root, manifest);
     say(`\nsetup: done${result.ok ? "" : " (verify still fails: the user accepted it)"}. Wrote ${MANIFEST_PATH}. Stop here.`);

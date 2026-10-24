@@ -40,7 +40,10 @@ The scan only detects and proposes. Every command under `candidates` was found i
    - `docs/adr/NNNN-<kebab-title>.md` (four digits, starting at the next free number): one ADR per architecture decision the code shows or the user confirmed, each with a `# ` title, context, decision and consequences. Reuse existing ADRs; never duplicate them.
 
 6. **Agent docs.** Follow the technical-writing skill if it is available: short sentences, one idea per line.
-   - `CLAUDE.md` at the repo root, at most 200 lines: purpose, stack, commands, architecture map, conventions, hard rules (MUST / NEVER) and a link to each skill. Import long docs with `@docs/...` instead of copying them. If it exists, update it and keep the user's content. If an `AGENTS.md` exists, import it with `@AGENTS.md` instead of repeating it.
+   - `CLAUDE.md` at the repo root, at most 200 lines: purpose, stack, commands, architecture map, conventions, hard rules (MUST / NEVER) and a link to each skill, plus two short sections. Import long docs with `@docs/...` instead of copying them. If it exists, update it and keep the user's content. The two sections, in the project's own words and with no fixed command (everything comes from the manifest and the verify-app skill):
+     - **Before calling a task done:** run the `verify` commands of `.claude/workflow.json` and the tools of `tools/verify/` listed in the verify-app skill; do not call the task done if any of them fails, say what failed instead.
+     - **When to use `/task`:** for changes that touch dependencies, migrations, paths in `review.paths`, or that are large. Everything else is done directly.
+     If an `AGENTS.md` exists, import it with `@AGENTS.md` instead of repeating it.
    - `.claude/skills/domain-<area>/SKILL.md`, one per business area. Frontmatter with `name` (equal to the folder name: lowercase letters, digits, hyphens) and `description` (when to use it), then the vocabulary, invariants, key files and pitfalls.
    - `.claude/rules/<topic>.md` for rules that apply only to some folders. Each starts with frontmatter whose `paths:` lists the globs it applies to, for example:
      ```
@@ -61,8 +64,9 @@ The scan only detects and proposes. Every command under `candidates` was found i
 
 9. **Review and finish.** Show the user what you wrote (the list of files and a 3-8 line summary, including what is still unresolved) and ask with `AskUserQuestion` whether to finish or what to change. Apply the feedback. Then run, with one `--step` per verify command in order, one `--connector` per enabled connector (`<id>:<server>` when it has an `.mcp.json` server) and one `--tool` per verification tool (`<python|nix>:<repo-relative path>`):
    ```
-   node --experimental-strip-types "${CLAUDE_PLUGIN_ROOT}/bin/wf-setup-finish.mjs" --step "<command>" --step "<command>" --connector "<id>:<server>" --tool "python:tools/verify/<name>.py"
+   node --experimental-strip-types "${CLAUDE_PLUGIN_ROOT}/bin/wf-setup-finish.mjs" --mode "direct" --step "<command>" --step "<command>" --connector "<id>:<server>" --tool "python:tools/verify/<name>.py"
    ```
+   `--mode "direct"` records the default way of working (work directly; `/task` is optional for risky changes); use `flow` only if the user asks for `/task` as the default.
    It checks the files above and each tool (exists, executable, pinned runtime, answers `--help`, named in the verify-app skill; a runtime missing on this machine is only a warning for the user), prints the exact command of each tool (copy it into the verify-app skill if it differs), runs verify and, when everything passes, writes `.claude/workflow.json` with `setup: "done"` and adds `.claude/workflow/` to `.gitignore` (keeping `tasks.jsonl` committed). If it exits non-zero, read the report, fix the cause (or the steps, if they are wrong) and run it again. After three verify failures in a row, ask the user whether to keep trying, finish anyway (add `--accept-failing-verify`) or pause (run it with `--pause` instead and stop; the next `/setup` resumes).
 
 If the user asks to pause at any point, run `wf-setup-finish.mjs --pause` and stop: it sets `setup: "pending"` so nothing pushes you to continue.

@@ -120,6 +120,17 @@ test("skill setup: runs on the large model, a literal `opus` (user_config is not
   assert.match(s.meta["allowed-tools"] ?? "", /AskUserQuestion/, "setup asks in the main thread");
 });
 
+test("skill setup: CLAUDE.md gets a verification section and the /task rule, and the manifest records mode direct", async () => {
+  const { body } = await load("setup");
+  const step6 = body.slice(body.indexOf("6. **Agent docs.**"), body.indexOf("7. **Verification.**"));
+  assert.match(step6, /Before calling a task done/);
+  assert.match(step6, /`verify` commands of `.claude\/workflow.json`/);
+  assert.match(step6, /`tools\/verify\/`/);
+  assert.match(step6, /`\/task`/);
+  assert.match(step6, /`review\.paths`/);
+  assert.match(body, /--mode "direct"/);
+});
+
 test("skill setup: with setup done it warns about the cost and asks before repeating", async () => {
   const { body } = await load("setup");
   const start = body.slice(body.indexOf("1. **Start.**"), body.indexOf("2. **Read.**"));

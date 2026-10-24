@@ -1,6 +1,6 @@
 # cc-improved
 
-pi-improved para Claude Code: un modelo barato implementa dentro de un flujo gobernado por código, y el modelo fuerte entra solo donde paga (chequeo del plan, revisión con riesgo, escalado). Es un plugin de Claude Code que usa lo nativo: plan mode, subagentes con modelo propio, skills, hooks, permisos, MCP y coste.
+pi-improved para Claude Code. Por defecto, `/setup` una vez con el modelo fuerte y después trabajo directo con el modelo barato. Para tareas de riesgo, un flujo opcional (`/task`) gobernado por código, donde el modelo fuerte entra solo donde paga (chequeo del plan, revisión con riesgo, escalado). Es un plugin de Claude Code que usa lo nativo: plan mode, subagentes con modelo propio, skills, hooks, permisos, MCP y coste.
 
 **Versión 0.1.0, pre-release.** Funciona de punta a punta en modo headless (`claude -p`); la interfaz interactiva (TUI) no está verificada. Ver [Limitaciones conocidas](#limitaciones-conocidas).
 
@@ -24,7 +24,31 @@ Al instalar, Claude Code pide `strong_model`, el modelo del chequeo del plan, la
 
 Notas de la instalación (spike 0.6, `docs/spikes/0.6-plugin-deps.md`): el plugin no tiene dependencias de runtime, pero Claude Code también instala las `devDependencies` del repo (`typescript`, `@types/node`) en la caché del plugin. Es un coste conocido, no un fallo.
 
-## Flujo
+## Modos de uso
+
+El modo por defecto es **directo**: el modelo barato trabaja con lo que dejó `/setup` (hecho una vez con opus). El flujo con gates (`/task`) es **opcional** y está pensado para tareas de riesgo. Elegir uno no impide el otro en el mismo repo; `.claude/workflow.json` guarda el modo del proyecto en el campo opcional `mode` (`"direct"` por defecto, o `"flow"` si quieres `/task` como ruta recomendada; sin el campo vale `direct`).
+
+1. **Por defecto: `/setup` una vez y trabajo directo.** `/setup` deja `CLAUDE.md` (con una sección de verificación antes de dar una tarea por terminada y la regla de cuándo usar `/task`), las skills del proyecto y las herramientas de verificación. Después trabajas con el modelo barato sin plan mode, gates ni revisión. Con `setup: "done"` y `mode: direct`, SessionStart lo dice en una línea.
+2. **Opcional, por riesgo: `/task` con gates y revisión.** Plan verificado, implementación con contexto recortado, contrato, `verify` y revisión del modelo fuerte si el diff es arriesgado. `CLAUDE.md` lo recomienda para cambios que tocan dependencias, migraciones, rutas de `review.paths`, o que son grandes. Es lo que tiene sentido ahí, donde el sobrecoste compra bloqueos y una segunda mirada.
+
+**Los gates solo corren con una tarea abierta** (`/task`). En modo directo no hay hooks nuevos que se activen en cada sesión; ver D-014 en [`docs/DECISIONS.md`](docs/DECISIONS.md). Quien quiera gates sin abrir tarea tendría que hacerlo por otra vía (por ejemplo, el CI del proyecto con los mismos comandos de `verify`).
+
+### Por qué ese orden: lo que mostró la eval
+
+| Brazo | Qué es | Tests ocultos (de 436) | Coste de ejecución (10 celdas) | Coste con el setup repartido |
+|---|---|---|---|---|
+| D0 | modelo barato, sin plugin ni setup | 322 | $0.26 | $0.26 |
+| D0s | modelo barato, sin plugin, con `/setup` | 343 | $0.26 | $0.75 |
+| D1 | plugin completo, sin setup | 337 | $2.41 | $2.41 |
+| D1v2 | plugin completo, con `/setup` | 333 | $2.12 | $2.61 |
+
+Cómo leerlo: **eval v2** (con setup previo; 436 tests ocultos en total; la tabla de «Resultados de la eval» más abajo es la v1 y no es comparable). **n=1 por celda y un solo repositorio** (`thereelcapital`, 5 tareas, variantes ciega y con pista): diferencias de unos pocos tests o de unos centavos están dentro del ruido. Lo medido es solo "tests ocultos por dólar"; no mide lo que aportan los gates, la revisión o los bloqueos. El coste con setup reparte los 7 setups ($4.94) entre 10 tareas. Detalle en [`docs/EVAL.md`](docs/EVAL.md).
+
+La **eval v3** repitió D0 y D0s con n=3 por celda (solo modelo barato, sin plugin): 328,7 tests de media sin setup (rango 319–345) y 336,3 con setup (329–343), con rangos que se solapan. **El setup no mostró una mejora de calidad más allá del ruido**, y la ventaja aparente de v2 no se sostuvo. No se repitió el flujo completo (D1, D1v2).
+
+Con estos datos: el flujo completo costó unas 8 veces más en ejecución que el modelo barato con setup ($2.12 contra $0.26) sin dar más tests, y el setup (unos $0.71 por commit base) no se paga por la calidad medida. **No se puede afirmar** que el flujo completo ni `/setup` mejoren la calidad. Se elige el modo directo como defecto por coste y simplicidad, y porque `/setup` deja convenciones y herramientas de verificación que se pueden usar sin plan mode; el flujo completo queda para tareas de riesgo, donde aporta bloqueos y revisión que esta eval no mide. Hay que repetir con más repos antes de concluir algo más fino.
+
+## Flujo completo (modo opcional `/task`)
 
 ```
 /cc-improved:setup  →  /cc-improved:task <ticket|descripción|spec>  →  /cc-improved:done  →  /cc-improved:pr
@@ -41,26 +65,6 @@ Notas de la instalación (spike 0.6, `docs/spikes/0.6-plugin-deps.md`): el plugi
 Otros comandos: `/verify` (corre a mano los comandos de `verify`), `/wf-doctor` (comprueba requisitos del plugin; no sustituye al `/doctor` nativo), `/wf` (panel de estado del mod opcional).
 
 El detalle de las 10 etapas del flujo y de qué cubre cada una está en [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
-
-## Dos modos de uso
-
-El plugin se puede usar de dos maneras. Elegir una no impide la otra en el mismo repo.
-
-1. **Solo `/setup`, y trabajar con el modelo barato.** Corres `/setup` una vez (con el mejor modelo, opus) y después trabajas con el modelo barato apoyándote en lo que dejó: `CLAUDE.md`, las skills del proyecto y las herramientas de verificación. No usas `/task`, así que no hay plan mode, ni gates, ni revisión.
-2. **`/task` con gates y revisión.** El flujo completo: plan verificado, implementación con contexto recortado, contrato, `verify` y revisión del modelo fuerte si el diff es arriesgado. Es lo que tiene sentido para tareas de riesgo, donde pagar el sobrecoste compra bloqueos y una segunda mirada.
-
-En la eval, el modelo barato con `/setup` (D0s) sacó 343 tests ocultos por $0.75 con el setup repartido, y el flujo completo con setup (D1v2) sacó 333 por $2.61:
-
-| Brazo | Qué es | Tests ocultos (de 436) | Coste de ejecución (10 celdas) | Coste con el setup repartido |
-|---|---|---|---|---|
-| D0 | modelo barato, sin plugin ni setup | 322 | $0.26 | $0.26 |
-| D0s | modelo barato, sin plugin, con `/setup` | 343 | $0.26 | $0.75 |
-| D1 | plugin completo, sin setup | 337 | $2.41 | $2.41 |
-| D1v2 | plugin completo, con `/setup` | 333 | $2.12 | $2.61 |
-
-Cómo leerlo: esta es la **eval v2** (con setup previo y otro conjunto de tests ocultos, 436 en total); la tabla de «Resultados de la eval» más abajo es la v1 y no es comparable. **n=1 por celda y un solo repositorio** (`thereelcapital`, 5 tareas, variantes ciega y con pista), así que diferencias de unos pocos tests o de unos centavos están dentro del ruido. Lo medido es solo "tests ocultos por dólar"; no mide lo que aportan los gates, la revisión o los bloqueos. El coste con setup reparte lo que costaron los 7 setups ($4.94 en total) entre 10 tareas. Detalle en [`docs/EVAL.md`](docs/EVAL.md) (eval v2, issue #73).
-
-Con estos datos **no se puede afirmar** que el flujo completo mejore la calidad, ni que `/setup` por sí solo la mejore: la única mejora clara de D0s (con pista, 183 frente a 162) viene casi toda de un ticket. Lo que sí se vio es que el flujo completo costó unas 8 veces más en ejecución que D0s sin dar más tests. Hay que repetir con varias ejecuciones por celda y más repos antes de concluir algo más fino.
 
 ## Herramientas de verificación portables
 
@@ -90,7 +94,7 @@ El modelo del frontmatter de un agent no admite `${user_config.*}` (spike 0.4), 
 
 ## Resultados de la eval
 
-**Eval v1** (sin setup previo; el conjunto de tests ocultos y las tareas no son los de la eval v2 de la sección «Dos modos de uso», así que los totales no son comparables entre ambas tablas). Detalle y matices en [`docs/EVAL.md`](docs/EVAL.md) (issue #28, 5 tareas de un repo real, una ejecución por celda). Resumen: Claude Code con cc-improved (D1) frente a Claude Code sin plugin (D0) y frente a pi-improved (C+).
+**Eval v1** (sin setup previo; el conjunto de tests ocultos y las tareas no son los de la eval v2 de la sección «Modos de uso», así que los totales no son comparables entre ambas tablas). Detalle y matices en [`docs/EVAL.md`](docs/EVAL.md) (issue #28, 5 tareas de un repo real, una ejecución por celda). Resumen: Claude Code con cc-improved (D1) frente a Claude Code sin plugin (D0) y frente a pi-improved (C+).
 
 | | Tests ocultos (ciega) | Tests ocultos (con pista de interfaz) | Coste (ciega / con pista) |
 |---|---|---|---|
