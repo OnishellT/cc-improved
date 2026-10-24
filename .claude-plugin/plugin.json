@@ -1,7 +1,7 @@
 {
   "name": "cc-improved",
   "version": "0.1.0",
-  "description": "pi-improved para Claude Code: flujo gobernado por código con modelo barato y modelo fuerte donde paga.",
+  "description": "pi-improved para Claude Code: por defecto, /setup una vez con el modelo fuerte y trabajo directo con el modelo barato; /task (gates y revisión) es opcional para tareas de riesgo.",
   "author": {
     "name": "OnishellT"
   },

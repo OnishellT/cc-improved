@@ -1,6 +1,6 @@
 # Forma de trabajo con cc-improved
 
-cc-improved existe para una idea: **el modelo barato implementa; el código decide cuándo puede avanzar; el modelo fuerte y la persona entran solo donde aportan.** Este documento describe el flujo completo que se espera en un proyecto, de la primera sesión al deploy, y qué parte cubre el plugin sobre Claude Code. Es la adaptación a Claude Code del WORKFLOW de [pi-improved](https://github.com/OnishellT/pi-improved).
+cc-improved existe para una idea: **el modelo barato implementa; el modelo fuerte y la persona entran solo donde aportan.** Por defecto, `/setup` una vez y trabajo directo; para tareas de riesgo, un flujo opcional (`/task`) donde el código decide cuándo puede avanzar (ver [Modos de uso](#modos-de-uso)). Este documento describe el flujo completo de un proyecto, de la primera sesión al deploy, y qué parte cubre el plugin sobre Claude Code. Es la adaptación a Claude Code del WORKFLOW de [pi-improved](https://github.com/OnishellT/pi-improved).
 
 Regla transversal: todo lo que hace el plugin es **agnóstico de lenguaje y framework**. No trae gates para un stack concreto; los comandos de verificación salen del propio proyecto y se guardan en `.claude/workflow.json`. Lo que el código comprueba por su cuenta lo hace sobre texto plano (nombres, archivos, diffs), nunca parseando un lenguaje.
 
@@ -31,7 +31,7 @@ Se hace una vez por repositorio, con el modelo más fuerte que haya: su salida e
 4. **Skill `verify-app` y herramientas de verificación.** Pequeñas herramientas dentro del repo (por defecto `tools/verify/`), una por propósito, con `--help`, código de salida y salida corta, con runtime `python` (solo biblioteca estándar) o `nix` (con su `shell.nix`). La sección **Tools** de `verify-app` dice cuándo usar cada una y qué significa su salida.
 5. **`verify`.** La lista de comandos ordenada de más rápida a más lenta. `bin/wf-setup-finish.mjs` comprueba en código que los archivos existen y tienen el formato correcto, corre `verify` y deja `.claude/workflow.json` con `setup: "done"`, `verify`, `tools` y `connectors`. Se versiona.
 
-Un `SessionStart` avisa si el repo no tiene setup, y el `Stop` empuja a terminarlo.
+Un `SessionStart` ofrece `/setup` si el repo no lo tiene, y el `Stop` empuja a terminarlo.
 
 ## 2. Planificación
 
@@ -93,12 +93,16 @@ Fuera del plugin. Lo hace el pipeline del proyecto cuando la PR se aprueba.
 
 Fuera del plugin y a propósito. La última palabra sobre la funcionalidad la tiene una persona en el entorno desplegado. Las herramientas de verificación y sus evidencias existen para que esa comprobación sea corta y dirigida, no para sustituirla.
 
-## Dos modos de uso
+## Modos de uso
 
-El flujo de arriba es el completo. No hace falta recorrerlo entero en cada tarea:
+El modo por defecto es el **directo**; el flujo completo es opcional y se elige por riesgo. `mode` en `.claude/workflow.json` (`"direct"` | `"flow"`, opcional y aditivo; sin él vale `direct`) lo registra, y `wf-setup-finish` escribe `direct`.
 
-- **Modo 1: solo `/setup`.** Etapa 1 una vez, con el modelo más fuerte, y después trabajar con el modelo barato usando `CLAUDE.md`, las skills del proyecto y las herramientas de verificación que dejó el setup. Sin `/task`, no hay gates ni revisión.
-- **Modo 2: `/task` con gates y revisión.** Etapas 2 a 7. Pensado para tareas de riesgo: el código bloquea por nombres, contrato y `verify`, y el modelo fuerte revisa cuando el diff lo pide.
+- **Modo directo (por defecto): `/setup` y trabajo directo.** Etapa 1 una vez, con el modelo más fuerte, y después trabajar con el modelo barato usando `CLAUDE.md`, las skills del proyecto y las herramientas de verificación que dejó el setup. El `CLAUDE.md` que genera `/setup` incluye una sección corta de verificación antes de dar una tarea por terminada (correr los comandos de `verify` del manifest y las herramientas de `tools/verify/` de `verify-app`, y no darla por terminada si fallan) y la regla de cuándo usar `/task`. No hay plan mode, gates ni revisión.
+- **Modo con gates (opcional, por riesgo): `/task`.** Etapas 2 a 7. Para cambios que tocan dependencias, migraciones, rutas de `review.paths`, o grandes: el código bloquea por nombres, contrato y `verify`, y el modelo fuerte revisa cuando el diff lo pide. Con `mode: "flow"`, es la ruta recomendada del proyecto.
+
+**Gates sin tarea (D-014).** Las puertas (`PreToolUse` de plan y guards, `SubagentStop`, `Stop`) siguen activas solo con una tarea abierta. No se añaden hooks que corran en toda sesión para vigilar el trabajo directo: costarían latencia y falsos bloqueos en cada sesión, y la eval no mostró que el flujo completo mejore la calidad. En modo directo la verificación depende de lo que `CLAUDE.md` pide al modelo, no de un bloqueo en código. Quien necesite que `verify` sea obligatorio sin abrir tarea debe ponerlo en el CI del proyecto (etapa 8).
+
+SessionStart dice una línea según el modo: con `setup` pendiente ofrece `/setup`; con `done` y `direct`, que se trabaja directo y que `/task` está disponible para riesgo; con `flow`, que se usa `/task`.
 
 Evidencia (eval v2, `docs/EVAL.md`, **n=1 por celda y un solo repo**; diferencias pequeñas son ruido):
 
@@ -109,9 +113,11 @@ Evidencia (eval v2, `docs/EVAL.md`, **n=1 por celda y un solo repo**; diferencia
 | D1 | plugin completo, sin setup | 337 | $2.41 | $2.41 |
 | D1v2 | plugin completo, con `/setup` | 333 | $2.12 | $2.61 |
 
-Cómo leerlo: **n=1 por celda y un solo repositorio** (`thereelcapital`, 5 tareas, variantes ciega y con pista), así que diferencias de unos pocos tests o de unos centavos están dentro del ruido. Lo medido es solo "tests ocultos por dólar"; no mide lo que aportan los gates, la revisión o los bloqueos. El coste con setup reparte lo que costaron los 7 setups ($4.94 en total) entre 10 tareas. Detalle en [`docs/EVAL.md`](docs/EVAL.md) (eval v2, issue #73).
+Cómo leerlo: **n=1 por celda y un solo repositorio** (`thereelcapital`, 5 tareas, variantes ciega y con pista), así que diferencias de unos pocos tests o de unos centavos están dentro del ruido. Lo medido es solo "tests ocultos por dólar"; no mide lo que aportan los gates, la revisión o los bloqueos. El coste con setup reparte los 7 setups ($4.94 en total) entre 10 tareas. Detalle en [`docs/EVAL.md`](EVAL.md) (eval v2, issue #73).
 
-Lectura honesta: en tests ocultos los cuatro brazos quedan en un rango parecido (322 a 343 de 436), y el flujo completo cuesta unas 8 veces más en ejecución que D0s. La eval no mide lo que el flujo aporta además de los tests (bloqueos, revisión), así que no demuestra que el modo 2 sobre; tampoco que el modo 1 baste para tareas de riesgo. Tras un setup `done`, SessionStart recuerda ambos modos en una línea.
+Eval v3 (issue #79): D0 y D0s repetidos con n=3 por celda dieron 328,7 (rango 319–345) y 336,3 (329–343) tests de media: **el setup no mejora la calidad más allá del ruido** y la ventaja de v2 no se sostuvo. No se repitió D1 / D1v2 (con plugin).
+
+Lectura honesta: en tests ocultos los brazos quedan en un rango parecido (322 a 343 de 436), y el flujo completo cuesta unas 8 veces más en ejecución que D0s. La eval no mide lo que el flujo aporta además de los tests (bloqueos, revisión), así que no demuestra que el modo con gates sobre; tampoco que el modo directo baste para tareas de riesgo. Por eso el directo es el defecto (coste y simplicidad), no porque se haya probado mejor.
 
 ## Cómo funciona por dentro
 

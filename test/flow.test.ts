@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { GATE_BUDGET_MS, QUICK_BUDGET_MS, REGISTRY } from "../lib/hooks/registry.ts";
-import { MODES_NOTE } from "../lib/hooks/session-start.ts";
+import { DIRECT_NOTE } from "../lib/hooks/session-start.ts";
 import type { HookEventName, Manifest, Plan, Task } from "../lib/types.ts";
 
 const PLUGIN_ROOT = fileURLToPath(new URL("../", import.meta.url));
@@ -102,8 +102,8 @@ test("the full task flow, event by event, through the hooks.json commands", asyn
   const task = async () => JSON.parse(await readFile(path.join(root, ".claude", "workflow", "task.json"), "utf8")) as Task;
   const exitPlan = (plan: Plan) => send("PreToolUse", "pre-tool-use.exit-plan-mode", { permission_mode: "plan", tool_input: { plan: planBlock(plan), planFilePath: path.join(plans, "plan-slug.md") } }, "ExitPlanMode");
 
-  // 0. Session start on a project with a finished setup and no task: only the one-line modes note.
-  assert.equal((await send("SessionStart", "session-start", {}, "startup"))?.hookSpecificOutput?.additionalContext, MODES_NOTE);
+  // 0. Session start on a project with a finished setup and no task: only the one-line direct-mode note.
+  assert.equal((await send("SessionStart", "session-start", {}, "startup"))?.hookSpecificOutput?.additionalContext, DIRECT_NOTE);
 
   // 1. First plan: `slugify` is in no evidence (spec, title, ticket) → denied as an invented name.
   const invented: Plan = {

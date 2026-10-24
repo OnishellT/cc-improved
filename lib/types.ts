@@ -58,10 +58,15 @@ export interface VerifyTool {
   env?: string;
 }
 
+/** How the project works by default: `direct` (cheap model with what /setup left; gates only with an open /task) or `flow` (/task recommended). */
+export type WorkflowMode = "direct" | "flow";
+
 /** Project state committed to the repo at `.claude/workflow.json`. */
 export interface Manifest {
   version: 1;
   setup: SetupStatus;
+  /** Default way of working; optional and additive, absent means `direct`. Gates only ever run with an open /task. */
+  mode?: WorkflowMode;
   /** Main language as `/setup` recorded it; informative only, nothing branches on it. */
   language?: string;
   /** ISO 8601 timestamps of the setup run. */

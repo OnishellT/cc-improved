@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { dispatch } from "../lib/hooks/dispatch.ts";
-import mod, { MODES_NOTE, setupNote, setupState, taskSummary } from "../lib/hooks/session-start.ts";
+import mod, { DIRECT_NOTE, FLOW_NOTE, setupNote, setupState, taskSummary, workflowMode } from "../lib/hooks/session-start.ts";
 import { manifestPath, taskPath } from "../lib/paths.ts";
 import type { ContextOutput, Task } from "../lib/types.ts";
 
@@ -46,10 +46,11 @@ test("setupState reads the manifest: missing, each status, and unreadable for ba
   assert.equal(await setupState((await sandbox({ manifest: "null" })).root), "unreadable");
 });
 
-test("setupNote: one line with both modes when done, quiet when declined; otherwise offers /setup without running it", () => {
-  assert.equal(setupNote("done"), MODES_NOTE);
-  assert.ok(!MODES_NOTE.includes("\n") && MODES_NOTE.length < 300);
-  assert.match(MODES_NOTE, /\/setup.*\/task/);
+test("setupNote: one line per mode when done (direct by default), quiet when declined; otherwise offers /setup without running it", () => {
+  assert.equal(setupNote("done"), DIRECT_NOTE);
+  assert.equal(setupNote("done", "flow"), FLOW_NOTE);
+  for (const note of [DIRECT_NOTE, FLOW_NOTE]) assert.ok(!note.includes("\n") && note.length < 300 && note.includes("/task"));
+  assert.match(DIRECT_NOTE, /directly/);
   assert.equal(setupNote("declined"), undefined);
   for (const s of ["missing", "pending", "running", "unreadable"] as const) assert.match(setupNote(s) ?? "", /\/setup/);
   assert.match(setupNote("missing") ?? "", /\.claude\/workflow\.json/);
@@ -68,8 +69,15 @@ test("real fixture, setup pending or running: offers /setup", async () => {
 });
 
 test("real fixture, setup done and no task: only the modes line; declined: no output", async () => {
-  assert.equal(await context((await sandbox({ manifest: manifest("done") })).env), MODES_NOTE);
+  assert.equal(await context((await sandbox({ manifest: manifest("done") })).env), DIRECT_NOTE);
   assert.equal(await dispatch(RAW, { env: (await sandbox({ manifest: manifest("declined") })).env, registry }), "");
+});
+
+test("workflowMode: flow only when the manifest says so; absent, unknown or unreadable is direct", async () => {
+  assert.equal(await workflowMode((await sandbox({ manifest: JSON.stringify({ setup: "done", mode: "flow" }) })).root), "flow");
+  for (const m of [manifest("done"), JSON.stringify({ setup: "done", mode: "other" }), "{not json"]) assert.equal(await workflowMode((await sandbox({ manifest: m })).root), "direct");
+  assert.equal(await workflowMode((await sandbox()).root), "direct");
+  assert.equal(await context((await sandbox({ manifest: JSON.stringify({ setup: "done", mode: "flow" }) })).env), FLOW_NOTE);
 });
 
 test("an open task is summarized; a closed one is not", async () => {
@@ -77,12 +85,12 @@ test("an open task is summarized; a closed one is not", async () => {
   const implementing = await context((await sandbox({ manifest: manifest("done"), task: { ticket: "LAB-142", plan } })).env);
   assert.equal(
     implementing,
-    MODES_NOTE + "\n" +
+    DIRECT_NOTE + "\n" +
       'Open workflow task: "Export invoices" (LAB-142), status implementing. Plan files: src/csv.ts, test/. Change only the plan files; verification runs automatically when you stop. The user closes the task with /done.',
   );
   const planning = await context((await sandbox({ manifest: manifest("done"), task: { status: "planning", planFilePath: "/tmp/plan.md" } })).env);
   assert.match(planning ?? "", /status planning\. Plan: \/tmp\/plan\.md\. The plan is waiting for the user's approval\./);
-  assert.equal(await context((await sandbox({ manifest: manifest("done"), task: { status: "done" } })).env), MODES_NOTE);
+  assert.equal(await context((await sandbox({ manifest: manifest("done"), task: { status: "done" } })).env), DIRECT_NOTE);
   assert.equal(taskSummary(undefined), undefined);
 });
 
