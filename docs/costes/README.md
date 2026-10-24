@@ -42,7 +42,7 @@ Notas:
 node docs/costes/usage-report.mjs --since 2026-10-25
 ```
 
-Compara el total diario con los ≈$218 de la línea base.
+Compara el total diario con los ≈$218 de la línea base. El informe avisa de los modelos que no tienen tarifa y deja fuera sus turnos, de modo que el total es una cota inferior: con los datos de la línea base avisa de 1 turno de Haiku 4.5, sin coste relevante.
 
 Análisis aparte (simulación que revalora los mismos tokens de la línea base; `usage-report.mjs` no la repite). Cada palanca por separado: compactar a 200k ahorra un 15 %; Fable a Opus, un 14 %; subagentes de Opus a Sonnet, un 5 %; ninguna espera de subagente de más de 5 minutos, un 10 %; ninguna reconstrucción en frío en sesiones principales, un 6 %. Combinadas sin contar dos veces: un 43 % (tope de 200k, Fable a Opus, subagentes de Opus a Sonnet, sin esperas largas) a un 48 % (con tope de 150k y sin reconstrucciones en sesiones principales). La configuración instalada solo impone una parte (el tope de contexto, el esfuerzo, el modelo de los subagentes y la caché del implementador); pasar de Fable a Opus, no dejar sesiones grandes paradas y no esperar dentro de subagentes dependen de hábitos. Suponen el mismo número de turnos; un modelo más barato puede necesitar más.
 

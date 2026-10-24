@@ -103,6 +103,11 @@ test("apply-global keeps a different existing file as a backup, once, before rep
   // a later run replaces nothing, so the backup still holds the user's file and not our earlier copy
   await run(apply, ["--home", dir]);
   assert.equal(await readFile(`${mine}.pre-cost-controls`, "utf8"), "my own implementer\n");
+  // editing the installed file and installing again replaces it, but the backup keeps the user's original
+  await writeFile(mine, "edited after install\n");
+  assert.match((await run(apply, ["--home", dir])).stdout, /^updated +\S+issue-implementer\.md$/m);
+  assert.equal(await readFile(mine, "utf8"), await readFile(agent, "utf8"));
+  assert.equal(await readFile(`${mine}.pre-cost-controls`, "utf8"), "my own implementer\n");
   // a file that did not exist before has nothing to back up
   await assert.rejects(stat(path.join(dir, "cost-hygiene.md.pre-cost-controls")));
 });

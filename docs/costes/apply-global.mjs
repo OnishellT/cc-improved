@@ -7,8 +7,9 @@
 // agents/issue-implementer.md are overwritten when they differ (they come from this repo); the first copy of a file
 // that gets replaced is kept as <file>.pre-cost-controls.
 // Run as: node docs/costes/apply-global.mjs [--dry-run] [--home ~/.claude]
-// Roll back: restore the *.pre-cost-controls copies, delete the import line in CLAUDE.md and delete the installed files
-// that have no copy (cost-hygiene.md, agents/issue-implementer.md).
+// Roll back: restore the *.pre-cost-controls copies that hold your own files (after a later update of this repo's files,
+// a copy may hold an earlier install instead: check it), delete the import line in CLAUDE.md and delete the installed
+// files that had no original (cost-hygiene.md, agents/issue-implementer.md).
 import { chmod, copyFile, mkdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import * as path from "node:path";
