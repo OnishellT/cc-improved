@@ -1,0 +1,99 @@
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 8498063..6446dee 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -73,17 +73,18 @@ Everything in CONTRIBUTING.md applies to you, in particular:
+ 
+ ## Working economically
+ 
+-Long sessions cost most through tool output kept in context.
++Long sessions cost most through tool output kept in context. Measurements, the global setup and the tool to re-measure: `docs/costes/README.md` in the cc-improved repo.
+ 
+ - Delegate polling, review-fix and restack loops to Sonnet subagents that report in at most 10 lines. Research subagents use Sonnet too. `bun run review <pr>` costs no session context: run it in a subagent or in the background and read only its confidence and findings.
++- Launch an implementer (one issue, end to end) as the `issue-implementer` subagent, not `general-purpose`: its prompt cache lasts an hour, so waiting for CI and reviews doesn't force it to re-write its whole context. Other subagents cache for 5 minutes.
+ - Screenshots and design comparisons happen in a subagent that reports in text; don't read images in the main session.
+ - Read big docs with `grep -n` and `sed -n`, not whole. Cap command output (`| head -c 4000`).
+ - Use Write or Edit for file changes, not nested heredocs.
+-- Check a PR with `scripts/pr-status.sh <pr>`; wait for CI with `scripts/pr-status.sh <pr> --wait` instead of monitors or sleep loops.
++- Check a PR with `scripts/pr-status.sh <pr>`; wait for CI with `scripts/pr-status.sh <pr> --wait` instead of monitors or sleep loops. It returns after 4 minutes with the status so far: run it again while checks are pending.
+ - Run browser tests locally only for specific specs with `--workers=2` at most, and never the full suite while `CI_RUNNER` is on: the machine is running CI. The full suite runs in CI (CONTRIBUTING.md#self-hosted-runner).
+ - Self-review the diff before leaving draft so the first bot review finds nothing; then fix each review round's findings, and every similar spot, in one batch (CONTRIBUTING.md#review-gate).
+ - Small independent PRs from `main`, no stacking; `gh pr merge <n> --auto --rebase` after the final clean review.
+-- Past about 250k tokens of context, restart with a short handoff note (open PRs, next steps).
++- Past about 150k tokens of context, restart with a short handoff note (open PRs, next steps). Every turn re-reads the whole context, so cost grows with the square of a session's length.
+ 
+ ## Also for you
+ 
+diff --git a/CONTRIBUTING.md b/CONTRIBUTING.md
+index 9961cca..0e5fc3a 100644
+--- a/CONTRIBUTING.md
++++ b/CONTRIBUTING.md
+@@ -86,7 +86,7 @@ The local reviewer builds its context from this file, `CLAUDE.md`, `.github/copi
+ - Spend reviews on code that will merge: don't request one for a PR that is still changing, and don't push to a PR while its review is running.
+ - Green CI is required as well.
+ - Once the local review of the final commit meets the bar above and every thread is resolved, enable auto-merge with `gh pr merge <n> --auto --rebase`; GitHub merges when the required checks pass.
+-- `scripts/pr-status.sh <pr> [--wait]` prints state, required checks, reviews, the local review's confidence and whether it covers the head, unresolved threads and the latest bot summary in one block; `--wait` first blocks until required checks finish.
++- `scripts/pr-status.sh <pr> [--wait]` prints state, required checks, reviews, the local review's confidence and whether it covers the head, unresolved threads and the latest bot summary in one block; `--wait` first blocks until required checks finish, for at most 4 minutes (`PR_STATUS_WAIT_MAX`, in seconds): run it again while they are pending.
+ 
+ ### Organizing commits
+ 
+diff --git a/docs/runbook.md b/docs/runbook.md
+index 6af34ed..1fa4c65 100644
+--- a/docs/runbook.md
++++ b/docs/runbook.md
+@@ -170,7 +170,7 @@ Events are listed per client in `/historial` and across clients in `/admin/histo
+ 
+   `toggle.sh on` switches back and refuses unless `ci.yml` keeps fork pull requests and `deploy` off the runners. Install and removal: `scripts/ci-runner/setup.sh` and `scripts/ci-runner/uninstall.sh` ([CONTRIBUTING.md](../CONTRIBUTING.md#self-hosted-runner)).
+ - **Flaky tests.** e2e runs as three shards; the required `e2e` check fails if any shard failed. Re-run only the failed jobs (`gh run rerun <run-id> --failed`). If the same test flakes twice, open an issue; do not merge on a red check.
+-- **Wait for a pull request.** `scripts/pr-status.sh <pr> --wait`.
++- **Wait for a pull request.** `scripts/pr-status.sh <pr> --wait` blocks for at most 4 minutes (`PR_STATUS_WAIT_MAX`, in seconds) and prints the status so far; run it again while checks are pending.
+ 
+ ## Related
+ 
+diff --git a/scripts/pr-status.sh b/scripts/pr-status.sh
+index c9ee3b1..6c55a69 100755
+--- a/scripts/pr-status.sh
++++ b/scripts/pr-status.sh
+@@ -1,7 +1,8 @@
+ #!/bin/sh
+ # Compact PR status: state, required checks, reviews (and the local review's confidence), unresolved threads, bot summary.
+ # Usage: scripts/pr-status.sh <pr-number> [--wait]
+-# --wait blocks until all required checks finish. Repo: $GH_REPO or the current one.
++# --wait blocks until all required checks finish, for at most $PR_STATUS_WAIT_MAX seconds (default 240);
++# run it again while checks are pending. Repo: $GH_REPO or the current one.
+ set -eu
+ 
+ pr=${1:?usage: pr-status.sh <pr-number> [--wait]}
+@@ -12,6 +13,10 @@ owner=${repo%/*}
+ name=${repo#*/}
+ 
+ if [ "$wait" = "--wait" ]; then
++  # A subagent's prompt cache lives 5 minutes: a tool call that blocks longer makes its next turn
++  # re-write the whole context. So wait in slices that fit, and let the caller come back.
++  budget=${PR_STATUS_WAIT_MAX:-240}
++  started=$(date +%s)
+   # Checks may not be registered right after a push: retry while none are reported.
+   tries=0
+   while [ "$tries" -lt 10 ]; do
+@@ -20,11 +25,17 @@ if [ "$wait" = "--wait" ]; then
+     tries=$((tries + 1))
+     sleep 6
+   done
+-  # Exit 8 means checks pending, 1 means one failed (the block below shows which);
+-  # anything else is a real error.
++  left=$((budget - ($(date +%s) - started)))
++  [ "$left" -ge 5 ] || left=5
++  # Exit 8 means checks pending, 1 means one failed (the block below shows which), 124 means the
++  # wait budget ran out; anything else is a real error.
+   rc=0
+-  gh pr checks "$pr" -R "$repo" --required --watch --interval 30 >/dev/null || rc=$?
+-  case $rc in 0 | 1 | 8) ;; *) echo "gh pr checks failed (exit $rc)" >&2; exit "$rc" ;; esac
++  timeout "$left" gh pr checks "$pr" -R "$repo" --required --watch --interval 30 >/dev/null || rc=$?
++  case $rc in
++    0 | 1 | 8) ;;
++    124) echo "checks still pending after ${budget}s: run --wait again to keep waiting" ;;
++    *) echo "gh pr checks failed (exit $rc)" >&2; exit "$rc" ;;
++  esac
+ fi
+ 
+ unavailable=0
