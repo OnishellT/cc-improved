@@ -1,0 +1,174 @@
+// docs/costes/apply-global.mjs on a temporary home, docs/costes/usage-report.mjs on a temporary transcript tree, and the
+// frontmatter of the global implementer agent.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { lstat, mkdir, mkdtemp, readFile, readlink, stat, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const apply = fileURLToPath(new URL("../docs/costes/apply-global.mjs", import.meta.url));
+const report = fileURLToPath(new URL("../docs/costes/usage-report.mjs", import.meta.url));
+const agent = fileURLToPath(new URL("../docs/costes/global/issue-implementer.md", import.meta.url));
+
+function run(script: string, args: string[]): Promise<{ code: number; stdout: string }> {
+  return new Promise((resolve) =>
+    execFile(process.execPath, ["--experimental-strip-types", script, ...args], (error, stdout) =>
+      resolve({ code: error ? ((error as { code?: number }).code ?? 1) : 0, stdout }),
+    ),
+  );
+}
+
+const SETTINGS = {
+  model: "sonnet",
+  hooks: { PreToolUse: [{ matcher: "Bash" }] },
+  modelSettings: { "claude-sonnet-5-5": { effortLevel: "xhigh" } },
+};
+
+async function home(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "costes-home-"));
+  await writeFile(path.join(dir, "settings.json"), JSON.stringify(SETTINGS, null, 2), { mode: 0o600 });
+  await writeFile(path.join(dir, "CLAUDE.md"), "@RTK.md\n");
+  return dir;
+}
+
+test("apply-global merges the settings without losing keys, and a second run changes nothing", async () => {
+  const dir = await home();
+  const original = await readFile(path.join(dir, "settings.json"), "utf8");
+  assert.equal((await run(apply, ["--home", dir])).code, 0);
+
+  const settings = JSON.parse(await readFile(path.join(dir, "settings.json"), "utf8"));
+  assert.equal(settings.model, "sonnet");
+  assert.deepEqual(settings.hooks, SETTINGS.hooks);
+  assert.equal(settings.modelSettings["claude-sonnet-5-5"].effortLevel, "medium");
+  assert.equal(settings.modelSettings["claude-opus-5-5"].effortLevel, "medium");
+  assert.equal(settings.autoCompactWindow, 200000);
+  assert.equal(settings.env.CLAUDE_CODE_SUBAGENT_MODEL, "sonnet");
+  assert.equal(await readFile(path.join(dir, "settings.json.pre-cost-controls"), "utf8"), original);
+  assert.equal((await stat(path.join(dir, "settings.json"))).mode & 0o777, 0o600);
+  assert.equal(await readFile(path.join(dir, "CLAUDE.md"), "utf8"), "@RTK.md\n@cost-hygiene.md\n");
+  assert.equal(await readFile(path.join(dir, "agents/issue-implementer.md"), "utf8"), await readFile(agent, "utf8"));
+
+  const again = await run(apply, ["--home", dir]);
+  assert.deepEqual(
+    again.stdout.trim().split("\n").map((line) => line.split(/\s+/)[0]),
+    ["unchanged", "unchanged", "unchanged", "unchanged"],
+  );
+  assert.equal(await readFile(path.join(dir, "CLAUDE.md"), "utf8"), "@RTK.md\n@cost-hygiene.md\n");
+});
+
+test("apply-global --dry-run says what it would do and writes nothing", async () => {
+  const dir = await home();
+  const result = await run(apply, ["--dry-run", "--home", dir]);
+  assert.match(result.stdout, /^would updated +\S+settings\.json$/m);
+  assert.equal(await readFile(path.join(dir, "settings.json"), "utf8"), JSON.stringify(SETTINGS, null, 2));
+  assert.equal(await readFile(path.join(dir, "CLAUDE.md"), "utf8"), "@RTK.md\n");
+  await assert.rejects(stat(path.join(dir, "cost-hygiene.md")));
+  await assert.rejects(stat(path.join(dir, "settings.json.pre-cost-controls")));
+  await assert.rejects(stat(path.join(dir, "agents")));
+});
+
+test("apply-global creates a missing settings.json as 0600 and writes through a symlinked CLAUDE.md", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "costes-home-"));
+  const real = path.join(dir, "managed-CLAUDE.md");
+  await writeFile(real, "@RTK.md\n");
+  await symlink(real, path.join(dir, "CLAUDE.md"));
+
+  const result = await run(apply, ["--home", dir]);
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /^created +\S+settings\.json$/m);
+
+  const settings = path.join(dir, "settings.json");
+  assert.equal((await stat(settings)).mode & 0o777, 0o600);
+  assert.equal(JSON.parse(await readFile(settings, "utf8")).autoCompactWindow, 200000);
+  await assert.rejects(stat(`${settings}.pre-cost-controls`)); // nothing to back up
+
+  // the link is still a link to the same file, and the file carries the import
+  assert.ok((await lstat(path.join(dir, "CLAUDE.md"))).isSymbolicLink());
+  assert.equal(await readlink(path.join(dir, "CLAUDE.md")), real);
+  assert.equal(await readFile(real, "utf8"), "@RTK.md\n@cost-hygiene.md\n");
+});
+
+test("apply-global keeps a different existing file as a backup, once, before replacing it", async () => {
+  const dir = await home();
+  const mine = path.join(dir, "agents/issue-implementer.md");
+  await mkdir(path.dirname(mine), { recursive: true });
+  await writeFile(mine, "my own implementer\n");
+
+  assert.match((await run(apply, ["--home", dir])).stdout, /^updated +\S+issue-implementer\.md$/m);
+  assert.equal(await readFile(`${mine}.pre-cost-controls`, "utf8"), "my own implementer\n");
+  assert.equal(await readFile(mine, "utf8"), await readFile(agent, "utf8"));
+
+  // a later run replaces nothing, so the backup still holds the user's file and not our earlier copy
+  await run(apply, ["--home", dir]);
+  assert.equal(await readFile(`${mine}.pre-cost-controls`, "utf8"), "my own implementer\n");
+  // editing the installed file and installing again replaces it, but the backup keeps the user's original
+  await writeFile(mine, "edited after install\n");
+  assert.match((await run(apply, ["--home", dir])).stdout, /^updated +\S+issue-implementer\.md$/m);
+  assert.equal(await readFile(mine, "utf8"), await readFile(agent, "utf8"));
+  assert.equal(await readFile(`${mine}.pre-cost-controls`, "utf8"), "my own implementer\n");
+  // a file that did not exist before has nothing to back up
+  await assert.rejects(stat(path.join(dir, "cost-hygiene.md.pre-cost-controls")));
+});
+
+test("the global implementer agent runs on sonnet with a one-hour prompt cache", async () => {
+  const text = await readFile(agent, "utf8");
+  const frontmatter = /^---\n([\s\S]*?)\n---\n/.exec(text)?.[1] ?? "";
+  assert.match(frontmatter, /^name: issue-implementer$/m);
+  assert.match(frontmatter, /^model: sonnet$/m);
+  assert.match(frontmatter, /^effort: medium$/m);
+  // the key is read only inside the `experimental` map (not at the top level of the frontmatter)
+  assert.match(frontmatter, /^experimental:\n {2}cacheTtl: 1h$/m);
+});
+
+type Usage = { output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
+
+const assistant = (id: string, ts: string, usage: Usage, content: object[] = [], model = "claude-sonnet-5-5") =>
+  JSON.stringify({ type: "assistant", uuid: `u-${id}`, timestamp: ts, message: { id, model, usage, content } });
+
+test("usage-report prices each message once, finds the cold rebuild and names the subagent type", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "costes-root-"));
+  const project = path.join(root, "-proj");
+  await mkdir(path.join(project, "s1", "subagents"), { recursive: true });
+  const launch = { type: "tool_use", id: "t1", name: "Agent", input: { subagent_type: "issue-implementer" } };
+  const launched = JSON.stringify({
+    type: "user",
+    message: { content: [{ type: "tool_result", tool_use_id: "t1", content: [{ type: "text", text: "agentId: abc123" }] }] },
+  });
+  await writeFile(
+    path.join(project, "s1.jsonl"),
+    [
+      // Sonnet: 1M output ($10) + 10M cache read ($1.17). The same message appears twice while streaming: counted once.
+      assistant("m1", "2026-10-21T10:00:00Z", { output_tokens: 10, cache_read_input_tokens: 10_000_000 }, [launch]),
+      assistant("m1", "2026-10-21T10:00:00Z", { output_tokens: 1_000_000, cache_read_input_tokens: 10_000_000 }),
+      launched,
+      // Ten idle minutes later the whole 100k context is written again: $0.2246, of which $0.2129 over a warm read.
+      assistant("m2", "2026-10-21T10:10:00Z", { cache_creation_input_tokens: 100_000 }),
+      assistant("m3", "2026-10-21T10:11:00Z", { output_tokens: 1000 }, [], "<synthetic>"),
+      // A real model with no rate is left out of the total, and the report says so.
+      assistant("m4", "2026-10-21T10:12:00Z", { output_tokens: 5 }, [], "claude-future-9"),
+    ].join("\n"),
+  );
+  // The subagent: 100k output on Sonnet is $1.00.
+  await writeFile(
+    path.join(project, "s1", "subagents", "agent-abc123.jsonl"),
+    assistant("a1", "2026-10-21T10:02:00Z", { output_tokens: 100_000 }),
+  );
+
+  const all = (await run(report, ["--root", root])).stdout;
+  assert.match(all, /^3 assistant turns .* estimated \$12\.39 at list price$/m);
+  assert.match(all, /^ +\$ +11\.39 .* sonnet-5-5 main$/m); // $11.17 + the $0.2246 rebuild
+  assert.match(all, /^ +\$ +1\.00 .* sonnet-5-5 sub$/m);
+  assert.match(all, /^ +main: +\$ +0\.21 +events=1$/m);
+  assert.match(all, /^ +sub +: +\$ +0\.00 +events=0$/m);
+  assert.match(all, /== subagents: 1 agents, \$1\.00 /);
+  assert.match(all, /agents= +1 +avg=\$1\.00 +issue-implementer$/m);
+
+  assert.match(all, /^warning: no rate for claude-future-9 \(1 turns\); .*lower bound$/m);
+  assert.doesNotMatch(all, /synthetic/);
+
+  const none = (await run(report, ["--root", root, "--since", "2026-10-22"])).stdout;
+  assert.match(none, /^0 assistant turns .* estimated \$0\.00 at list price$/m);
+  assert.doesNotMatch(none, /warning/); // the skipped turn is outside the window
+});

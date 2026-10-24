@@ -1,0 +1,8 @@
+{
+  "autoCompactWindow": 200000,
+  "modelSettings": {
+    "claude-sonnet-5-5": { "effortLevel": "medium" },
+    "claude-opus-5-5": { "effortLevel": "medium" }
+  },
+  "env": { "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet" }
+}

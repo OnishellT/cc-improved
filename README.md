@@ -118,7 +118,7 @@ claude --plugin-dir .    # carga el plugin en esta sesión
 npm run e2e              # cuesta dinero (claude -p): fuera de CI
 ```
 
-Evals de skills (cuestan unos centavos, fuera de CI): `evals/README.md`. Convenciones de trabajo: `docs/CONVENTIONS.md`; decisiones: `docs/DECISIONS.md`. Los hooks están en `hooks/README.md` y el mod en `mod/README.md`.
+Evals de skills (cuestan unos centavos, fuera de CI): `evals/README.md`. Costes del uso real, no de las evals: `docs/costes/README.md`. Convenciones de trabajo: `docs/CONVENTIONS.md`; decisiones: `docs/DECISIONS.md`. Los hooks están en `hooks/README.md` y el mod en `mod/README.md`.
 
 El plan completo, con las equivalencias nativas y las fases, está en el repo [pi-improved](https://github.com/OnishellT/pi-improved) (`docs/PLAN-claude-code.md`).
 
