@@ -11,7 +11,7 @@ export type SetupStatus = "pending" | "running" | "done" | "declined";
 /** How much review a diff needs: none (skip), low (cheap model), high (strong model). */
 export type RiskLevel = "none" | "low" | "high";
 
-/** When the strong-model diff review runs. Default: only when `risk.ts` finds the diff risky. */
+/** When a model reviews the diff or the plan. Default (no `review`): never; the deterministic gates still run (D-015). */
 export interface ReviewPolicy {
   /** Repo-relative paths or prefixes (ending in `/`) whose changes always count as risky. */
   paths?: string[];
@@ -19,10 +19,10 @@ export interface ReviewPolicy {
   always?: boolean;
   /** Never pay for a diff review. */
   never?: boolean;
-  /** Model check of the plan before the user approves it. Default: off, except when the plan touches risk triggers; true also checks big plans; false never. */
+  /** Model check of the plan before the user approves it. Default: off. `true` turns it on (risky plans get the strong model, big ones the cheap one); `review.always` or a `minLevel` of `low`/`high` check risky plans; `false` never. */
   plan?: boolean;
-  /** Lowest risk level that requests a model review: `high` (default) or `low`. A `low` diff is always recorded. */
-  minLevel?: "low" | "high";
+  /** Lowest risk level that requests a model review: `off` (default, none), `high` or `low`. The level is recorded either way. */
+  minLevel?: "off" | "low" | "high";
   /** Diff size above which a (cheap-model) review is requested. Defaults: 200 lines, 6 files. */
   maxLines?: number;
   maxFiles?: number;

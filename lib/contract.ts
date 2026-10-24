@@ -5,6 +5,9 @@ import type { InterfaceEntry, Plan } from "./types.ts";
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const word = (name: string, flags = "") => new RegExp(`(^|[^A-Za-z0-9_])${escape(name)}(?=$|[^A-Za-z0-9_])`, flags);
 
+/** True when `name` appears in `text` as a whole word (case-sensitive; plain text, any language). */
+export const hasName = (text: string, name: string): boolean => word(name).test(text);
+
 /** Tokens of a file stem: `entry-sizing` → entry, sizing; `orderGuards` → order, guards. */
 export const stemTokens = (file: string) =>
   path

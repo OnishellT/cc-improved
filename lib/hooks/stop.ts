@@ -64,7 +64,7 @@ async function gate(input: StopInput, ctx: HookContext, manifest: Manifest): Pro
   s.failures = 0;
   s.verifiedFingerprint = print || undefined;
 
-  // Risk gating: one review per task, paid only when the diff is risky.
+  // Risk gating: one review per task, paid only when the manifest opts in (review.always / review.minLevel); the risk level is recorded either way.
   let reviewNote: string;
   if (s.reviewVerdict || s.reviews >= MAX_REVIEWS) {
     reviewNote = s.reviewVerdict === "FIX" ? "revisión: FIX (hallazgos aplicados, comprobados por verify; sin segunda ronda)" : `revisión: ${s.reviewVerdict ?? "hecha"}`;
@@ -84,7 +84,7 @@ async function gate(input: StopInput, ctx: HookContext, manifest: Manifest): Pro
     if (risk.review) reviewNote = "revisión pedida y no hecha";
     else {
       s.reviews++;
-      reviewNote = risk.level === "none" ? "revisión omitida (sin riesgo)" : "revisión omitida (riesgo bajo registrado; review.minLevel: \"low\" la pediría)";
+      reviewNote = risk.level === "none" ? "revisión omitida (sin riesgo)" : "revisión omitida (riesgo registrado; review.minLevel la pediría)";
     }
   }
 

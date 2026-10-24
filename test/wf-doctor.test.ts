@@ -181,3 +181,12 @@ test("a manifest with malformed tools fails", async () => {
   assert.equal(get(r, "manifest")?.status, "fail");
   assert.match(get(r, "manifest")!.detail, /`tools`/);
 });
+
+test("mode and review.minLevel are validated (D-014 gap, D-015)", async () => {
+  for (const mode of ["direct", "flow"]) assert.equal(get(await doctor(await sandbox({ manifest: { ...good, mode }, stubs: allTools })), "manifest")?.status, "ok", mode);
+  const bad = await doctor(await sandbox({ manifest: { ...good, mode: "turbo", review: { minLevel: "medium" } }, stubs: allTools }));
+  assert.equal(get(bad, "manifest")?.status, "fail");
+  assert.match(get(bad, "manifest")!.detail, /`mode` debe ser uno de direct, flow/);
+  assert.match(get(bad, "manifest")!.detail, /`review.minLevel` debe ser uno de off, low, high/);
+  for (const minLevel of ["off", "low", "high"]) assert.equal(get(await doctor(await sandbox({ manifest: { ...good, review: { minLevel } }, stubs: allTools })), "manifest")?.status, "ok", minLevel);
+});

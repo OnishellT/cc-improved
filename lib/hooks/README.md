@@ -27,7 +27,7 @@ El flag no hace nada desde Node 22.18, pero las 22.x anteriores lo necesitan par
 
    Si necesitas otro módulo o cambiar el orden, edita `REGISTRY` y dilo en la PR.
 
-   Los gates de revisión (D-008): `stop.ts` pide la revisión según `assessRisk().level` (`none` y `low` no; `low` solo con `review.minLevel: "low"`, con `reviewer-sonnet`; `high` con el fuerte) y `exit-plan-mode.ts` pide `plan-check` solo con riesgo alto en el plan, o en planes grandes con `review.plan: true` (`planCheckLevel`, D-012). La ruta rápida de `/task` usa `notSmallReasons`. La variante la decide `strongAgentChoice(name, env, { strong })` en `gate.ts`.
+   Los gates de revisión (D-008): `stop.ts` registra siempre `assessRisk().level` y pide la revisión solo si el manifest la activa (D-015): `review.always`, `review.minLevel: "low"` (cualquier nivel salvo `none`, con `reviewer-sonnet` si es `low`) o `"high"` (solo nivel alto, con el fuerte); y `exit-plan-mode.ts` pide `plan-check` solo con ese opt-in (`planCheckLevel`): fuerte con riesgo alto en el plan, barato en planes grandes con `review.plan: true`. La ruta rápida de `/task` usa `notSmallReasons`. La variante la decide `strongAgentChoice(name, env, { strong })` en `gate.ts`.
 
 2. Crea `lib/hooks/<módulo>.ts` con un export por defecto de tipo `HookModule`: un manejador por cada evento que atiendas.
 

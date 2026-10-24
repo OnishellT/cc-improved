@@ -8,9 +8,11 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MANIFEST_PATH, manifestPath, projectDir } from "../lib/paths.ts";
-import { TOOL_RUNTIMES, toolEnv, toolRuntimeBin } from "./wf-setup-finish.mjs";
+import { TOOL_RUNTIMES, WORKFLOW_MODES, toolEnv, toolRuntimeBin } from "./wf-setup-finish.mjs";
 
 const MIN_NODE = [22, 0];
+/** Values of `review.minLevel` (`ReviewPolicy` in lib/types.ts). */
+const REVIEW_LEVELS = ["off", "low", "high"];
 const SETUP = ["pending", "running", "done", "declined"];
 const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -93,6 +95,8 @@ async function readManifest(root) {
   if (!Array.isArray(data.connectors) || data.connectors.some((c) => typeof c?.id !== "string")) errors.push("`connectors` debe ser una lista de objetos con `id`");
   if (data.agentlint !== undefined && (typeof data.agentlint !== "string" || !data.agentlint.trim())) errors.push("`agentlint` debe ser texto no vacío");
   if (data.review !== undefined && (typeof data.review !== "object" || data.review === null || Array.isArray(data.review))) errors.push("`review` debe ser un objeto");
+  if (data.mode !== undefined && !WORKFLOW_MODES.includes(data.mode)) errors.push(`\`mode\` debe ser uno de ${WORKFLOW_MODES.join(", ")}`);
+  if (data.review?.minLevel !== undefined && !REVIEW_LEVELS.includes(data.review.minLevel)) errors.push(`\`review.minLevel\` debe ser uno de ${REVIEW_LEVELS.join(", ")}`);
   if (data.tools !== undefined && (!Array.isArray(data.tools) || data.tools.some((t) => typeof t?.path !== "string" || !TOOL_RUNTIMES.includes(t?.runtime)))) {
     errors.push(`\`tools\` debe ser una lista de objetos con \`path\` y \`runtime\` (${TOOL_RUNTIMES.join(" o ")})`);
   }

@@ -5,13 +5,13 @@ Configuración de hooks del plugin (`hooks.json`). Todos los eventos usan el mis
 | Evento | Matcher | Timeout | Para qué |
 |---|---|---|---|
 | `SessionStart` | (todos) | 15 s | aviso de setup y resumen de la tarea abierta |
-| `PreToolUse` | `ExitPlanMode` | 15 s | validación del plan, nombres verificados, decisiones, petición del chequeo del plan (solo riesgo alto o `review.plan: true`) |
+| `PreToolUse` | `ExitPlanMode` | 15 s | validación del plan, nombres verificados, decisiones, petición del chequeo del plan (apagado por defecto; con `review.plan: true`, `review.always` o `review.minLevel`) |
 | `PreToolUse` | `Edit\|Write\|MultiEdit\|NotebookEdit\|Bash` | 15 s | guards de la implementación (fuera del plan, dependencias, migraciones, agentlint) |
 | `PostToolUse` | `ExitPlanMode` | 15 s | plan aprobado: la tarea pasa a `implementing` |
 | `PostToolUse` | `mcp__.*` | 15 s | texto del ticket como evidencia |
 | `SubagentStart` | (todos) | 15 s | telemetría |
 | `SubagentStop` | `(^\|:)(implementer\|reviewer\|plan-check\|fixer)(-sonnet)?$` | 600 s | gate del implementer/fixer (contrato, verify) y veredictos |
-| `Stop` | (todos) | 600 s | empuje de `/setup` y gate del orquestador (contrato, verify, revisión solo con riesgo alto o `review.minLevel: low`) |
+| `Stop` | (todos) | 600 s | empuje de `/setup` y gate del orquestador (contrato, verify, revisión solo si el manifest la activa: `review.always` o `review.minLevel: low|high`) |
 
 Notas:
 
