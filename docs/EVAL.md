@@ -326,3 +326,142 @@ Coste de las 40 ejecuciones nuevas: $0.99. El coste del setup ($4.94 por los 7 s
 ## Reproducir
 
 Scratchpad de la sesión (`eval-v3/`), fuera del repo: `tools/run3.sh <D0|D0s> <b|h> <pr> <rep>` (copia limpia, ejecuta y corrige con `grade2.sh`), `tools/agg.py` (tabla), reutilizando `data/`, `src-repo/` y `setup/` (copias congeladas) de `eval-v2/`. Los resultados crudos no se suben.
+
+---
+
+# Eval v4: modo directo con contract-first (D0s+c) y D1 sin revisión (issue #89)
+
+Fecha: 2026-10-24. Coste total gastado: **$1.92** (tope duro: $4; $0.30 por ejecución con `--max-budget-usd`, salvo el setup real, tope $1.50): setup real $0.63, D0s+c $0.79, D1v2 sin revisión $0.51. Plugin medido: `cc-improved` en `origin/main` **`e89daf0ff0980d69732a9b241cd6eeb0928ffb81`** (con #87), sin cambios durante la eval. Mismas 10 celdas, mismos tickets, pistas, prompt de tarea y grader (`grade2.sh` y `shim.py`) que v1, v2 y v3. Las ejecuciones de D0 y D0s de v3 (n=3) son los brazos de comparación; no se repitieron.
+
+**Criterio fijado antes de ejecutar (issue #89, no se cambió):** adoptar si el coste es ≤ D0s × 1,3 y la suma de tests no cae más de ~12 pp; el efecto en validación y nombres se reporta como indicativo (n bajo).
+
+## Brazos
+
+| Brazo | Qué es | n por celda |
+|---|---|---|
+| D0 (v3) | haiku, sin plugin, sin setup | 3 |
+| D0s (v3) | haiku, sin plugin, con el setup de opus de v2 | 3 |
+| **D0s+c** | D0s + las dos secciones nuevas en `CLAUDE.md` + `--plugin-dir` del plugin actual (skills y script; con `disableAllHooks`, sin hooks de `/task`) | 3 |
+| **D1v2 sin revisión** (`D1n` en las tablas) | `/cc-improved:task` con el plugin actual y el manifest de v2 (sin `review`: revisión y plan-check apagados por defecto); `strong_model: sonnet` como en D1v2 | 1 |
+
+Todos con `--model claude-haiku-5-5 --permission-mode acceptEdits --max-budget-usd 0.30`. Cada ejecución parte de una copia limpia de la copia congelada de v2 (más el ticket); hasta 6 a la vez (D0s+c) y 5 a la vez (D1v2 sin revisión), así que el tiempo de pared no es comparable con v1. D1v2 sin revisión usa el host de permisos de v2 (`host.mjs`), que contesta `AskUserQuestion` con la primera opción.
+
+## Paso 1: setup real del plugin nuevo
+
+Se corrió `/cc-improved:setup` (`claude-opus-5-5`, por el `model: opus` de la skill) en una copia limpia del commit base de pr223: `env -uCLAUDECODE claude -p --plugin-dir <worktree> --output-format json --permission-mode bypassPermissions --max-budget-usd 1.5`, con el mismo prompt no interactivo de v2 (idioma Español, sin conectores, sin agentlint, `verify` = `bun test`, una herramienta python; sin entrevista). Como en v2, `acceptEdits` no deja escribir en `.claude/skills/`; se usó `bypassPermissions` solo en esa copia (un clon en el scratchpad, nunca un repo real).
+
+- **Coste real: $0.626**, 12 turnos, 90 s, todo `claude-opus-5-5`. `setup: done`, `mode: "direct"` en `.claude/workflow.json`.
+- **Generó** (además de lo habitual): `CLAUDE.md` 110 líneas (+19), `verify-app`, 2 skills `domain-*`, `tools/verify/unit_tests.py`, `GLOSSARY.md` (25 términos), 1 ADR y `.claude/workflow.json`. Para que el `verify` pasara usó `bun test ./src/lib ./scripts` (534 tests, 0 fallos).
+- **Las dos secciones salieron bien:** «Antes de dar una tarea por terminada» (3 viñetas) y «Contrato primero» (4 viñetas: seguir la skill `contract-first`, `contract.json`, lista de entradas inválidas, `wf-contract-check.mjs`, y cuándo usar `/task`). Son **12 líneas** con los títulos y las líneas en blanco (≤15). Las escribió en español (idioma del setup). El `CLAUDE.md` añade además una tercera sección corta de enlaces a las skills de dominio y el glosario (unas 5 líneas), que no es parte de las dos secciones. La skill `contract-first` se nombra en la sección y el modelo la ve en la lista de skills (su descripción aparece en el contexto de los transcripts revisados de D0s+c); no hay un enlace de archivo como tal.
+- Es una sola copia (n=1): no mide la variación del setup.
+
+## Paso 2: D0s+c
+
+Las 12 líneas de las dos secciones, tal como las generó el paso 1, se añadieron al final del `CLAUDE.md` de cada copia congelada de v2 (en lugar de pagar 7 setups nuevos, ~$4.9). La skill `contract-first` y `bin/wf-contract-check.mjs` quedan disponibles por `--plugin-dir`; los hooks, apagados. Proyección tras 4 ejecuciones: $0.117, unos $0.029 por ejecución, ~$0.88 para 30; el total real fue $0.79.
+
+## Resultados por celda
+
+Tests ocultos que pasan en cada repetición, con la media. Las celdas ruidosas (las que más mueven entre repeticiones por un nombre o por validación: pista pr51, ciega pr223, ciega pr84) se marcan con `*`.
+
+| Celda | Total | D0 (v3) | D0s (v3) | D0s+c | D1v2 sin revisión |
+|---|---|---|---|---|---|
+| ciega pr58 | 20 | 0, 2, 2 (1,3) | 3, 1, 0 (1,3) | 3, 1, 3 (2,3) | 1 |
+| ciega pr53 | 11 | 10, 10, 10 | 10, 10, 10 | 10, 10, 10 | 10 |
+| ciega pr198 | 72 | 69, 70, 70 (69,7) | 70, 70, 70 | 69, 70, 69 (69,3) | 69 |
+| ciega pr84 `*` | 23 | 9, 5, 5 (6,3) | 10, 11, 2 (7,7) | 14, 10, 11 (11,7) | 0 |
+| ciega pr223 `*` | 78 | 72, 67, 67 (68,7) | 67, 61, 61 (63,0) | 61, 67, 72 (66,7) | 61 |
+| pista pr58 | 20 | 20, 20, 20 | 20, 20, 20 | 20, 20, 20 | 20 |
+| pista pr84 | 23 | 14, 14, 14 | 14, 15, 14 (14,3) | 14, 14, 14 | 14 |
+| pista pr223 | 78 | 70, 70, 70 | 70, 73, 71 (71,3) | 70, 70, 75 (71,7) | 70 |
+| pista pr51 `*` | 85 | 38, 63, 39 (46,7) | 59, 52, 57 (56,0) | 57, 60, 57 (58,0) | 65 |
+| pista pr64 | 26 | 20, 24, 22 (22,0) | 20, 24, 24 (22,7) | 25, 25, 19 (23,0) | 19 |
+
+## Totales por brazo (las 10 celdas, máximo 436)
+
+Suma de cada repetición n.º 1, 2 y 3 sobre las celdas; media y rango de las tres sumas.
+
+| Brazo | Sumas por repetición | Media (rango) | 7 celdas tranquilas (de 250) | 3 celdas ruidosas (de 186) | Ciega (de 204) | Con pista (de 232) | Coste por pasada de 10 celdas | Tiempo medio | Turnos medios |
+|---|---|---|---|---|---|---|---|---|---|
+| D0 | 322, 345, 319 | **328,7** (319–345) | 207,0 (203–210) | 121,7 (111–135) | 156,0 | 172,7 | $0.248 | 90 s | 18,1 |
+| D0s | 343, 337, 329 | **336,3** (329–343) | 209,7 (207–213) | 126,7 (120–136) | 152,0 | 184,3 | $0.252 | 90 s | 18,7 |
+| **D0s+c** | 343, 347, 350 | **346,7** (343–350) | 210,3 (210–211) | 136,3 (132–140) | 160,0 | 186,7 | **$0.264** | 101 s | 19,8 |
+| **D1v2 sin revisión** | 329 (n=1) | 329 | 203 | 126 | 141 | 188 | **$0.506** | 208 s | 18,4 |
+
+Coste por pasada: media de las ejecuciones nuevas por 10 (D0: 20 ejecuciones; D0s: 30; D0s+c: 30; D1v2 sin revisión: 10). El setup real ($0.63) no entra; con el setup amortizado el coste por tarea sube en todos los brazos con setup igual que en v2.
+
+## Criterio aplicado
+
+| Comparación con D0s | Coste | Suma de tests | Veredicto |
+|---|---|---|---|
+| **D0s+c** | $0.264 contra $0.252: **×1,05** (límite ×1,3: se cumple) | 346,7 contra 336,3: **+10,4** (+2,4 pp de 436; no cae: se cumple) | **Se cumple el criterio.** |
+| **D1v2 sin revisión** | $0.506 contra $0.252: **×2,0** (límite ×1,3: **no** se cumple) | 329 contra 336,3: −7,3 (−1,7 pp; dentro de −12 pp) | **No se cumple** (falla el coste). |
+
+Lectura honesta:
+
+- **D0s+c cumple el criterio, pero su ventaja en tests no es demostrable.** La media sube 10,4 tests, los rangos de las sumas casi no se tocan (343–350 contra 329–343; solo coinciden en 343) y n=3 es poco. Casi todo viene de las celdas ruidosas (+9,6 de los 10,4: ciega pr84 11,7 contra 7,7 y ciega pr223 66,7 contra 63,0); en las 7 tranquilas la diferencia es de +0,7 tests (210,3 contra 209,7). Los efectos de v3 ya enseñaron que estas tres celdas se mueven por una decisión de nombre, no por el brazo.
+- **No se puede atribuir la mejora a contract-first** (ver «Uso real»): el modelo no invocó la skill ni una vez en 30 ejecuciones. Lo que cambió respecto de D0s fueron las 12 líneas de `CLAUDE.md` y, a lo sumo, que el modelo escribió `contract.json` en 8 de 30 por esas líneas. Habría que comparar con un brazo que lleve solo las dos secciones sin plugin para separar ambas cosas (no se hizo).
+- **D1v2 sin revisión** costó la mitad que D1v2 con revisión (v2: $2.12; ahora $0.51 por pasada), pero sigue en el doble de D0s y no da más tests (329; ciega 141, la más baja de todos los brazos: pr84 0/23 y pr223 61/78 por nombres). Es n=1 por celda, así que solo es un orden de magnitud de coste, no una medida de calidad.
+
+## Clases de fallo
+
+Tests ocultos que fallan, sumados sobre todas las ejecuciones y divididos por las pasadas (media por pasada de 10 celdas; D1v2 sin revisión: la pasada única). Clasificación automática del texto del fallo, igual que en el análisis propio de datos (`nombres`: módulo o export ausente; `validación`: debía lanzar y no lanzó, o caso «rechaza/inválido»; `forma de argumentos`: `TypeError`/«is not a function»; `otros`: valor o lógica). Solo cuenta los tests que cargan: los de un archivo que no carga por un nombre ausente no entran.
+
+| Brazo | Nombres | Validación de entradas | Forma de argumentos | Otros | Total clasificado |
+|---|---|---|---|---|---|
+| D0 | 18,7 | 44,7 | 4,7 | 35,3 | 103,3 |
+| D0s | 25,7 | 40,3 | 9,3 | 20,3 | 95,7 |
+| D0s+c | 15,7 | 43,3 | 0,0 | 26,3 | 85,3 |
+| D1v2 sin revisión | 36,0 | 30,0 | 14,0 | 23,0 | 103,0 |
+
+- **Validación de entradas no baja con contract-first**: 43,3 por pasada contra 40,3 (D0s) y 44,7 (D0). Es la clase dominante en todos los brazos (la mitad de los fallos). Los fallos típicos siguen siendo «debe lanzar `RangeError` ante dinero o incremento inválido» (pista pr51 y pr64, pista pr84). La lista de validación de la skill no se vio en estos resultados; con n=3 y sin que el modelo la leyera, no es sorprendente.
+- **Nombres y forma de argumentos bajan algo** en D0s+c (15,7 y 0,0 contra 25,7 y 9,3 de D0s), pero es indicativo: son sobre todo las celdas ciegas pr84 y pr58 y sus exportaciones, que cambian de una repetición a otra.
+- **D1v2 sin revisión** acumula más fallos de nombres (36,0): en ciega pr223 el host contestó la primera opción de `AskUserQuestion` (`updateClientName`, la equivocada), igual que en v2.
+- Los tests visibles no avisan: **en 30 de 30 ejecuciones de D0s+c el último resumen visible de `bun test` fue verde (0 fallos), y en 27 de ellas fallaban tests ocultos** (en D1v2 sin revisión, 9 de 10 verdes con fallos ocultos en 8). Los tests visibles no sirven como señal de escalado.
+
+## Uso real de contract-first
+
+Medido en los transcripts de D0s+c (30) y en el stream de D1v2 sin revisión (10):
+
+| Señal | D0s+c (30) | D1v2 sin revisión (10) |
+|---|---|---|
+| Invocó la skill `contract-first` (herramienta `Skill`) | **0** | 0 |
+| Escribió `.claude/workflow/contract.json` | 8 (pr58 ciega ×3, pr198 ciega ×1, pr223 pista ×1, pr58 pista ×1, pr64 pista ×1, pr84 pista ×1) | 0 (el flujo `/task` tiene su propia puerta de contrato) |
+| Ejecutó `wf-contract-check` | **1** | 0 por el modelo (la puerta lo hace en el hook de parada) |
+| Resultado de esa ejecución | `CONTRACT MISSING`: había buscado el script con `find /` y lo llamó por ruta absoluta del worktree, antes de escribir el contrato; no volvió a correrlo | — |
+
+Es decir: la skill y el script casi no se usaron. Las 8 veces que el modelo escribió `contract.json` fueron, con toda probabilidad, por las viñetas de `CLAUDE.md` (no se cargó la skill), y el script apenas se ejecutó. En dos transcripts el modelo buscó el script con `find` porque no lo encontró en el `PATH` de `Bash` (la skill y el setup dicen que está en el `PATH`; en ninguna ejecución se vio que `wf-contract-check.mjs` se pudiera llamar sin ruta). En D1v2 sin revisión, `/task` es lo que impone el contrato (gates), no la skill.
+
+## Desglose por modelo y subagente
+
+- **D0s+c:** todo `claude-haiku-5-5` ($0.79); no hay subagentes.
+- **D1v2 sin revisión:** todo `claude-haiku-5-5` ($0.51 en 10 ejecuciones): orquestador e implementer (11 llamadas a `cc-improved:implementer`, ninguna a `reviewer`, `plan-check` ni `fixer`). **Confirmado: sin revisión ni plan-check de modelo** por defecto; no hay coste de sonnet ni de opus (en v2 sonnet era el 63 %). El stream de `-p` no trae el coste por subagente; solo por modelo (`modelUsage`).
+- **Nivel de revisión:** no se registra (limitación ya conocida de v2); aquí fue `off` por defecto en las 10 ejecuciones de D1v2 sin revisión.
+
+## Limitaciones
+
+- **n bajo.** n=3 en D0, D0s y D0s+c, y n=1 en D1v2 sin revisión. La variación entre repeticiones de un mismo brazo (hasta 26 tests en D0) es mayor que las diferencias entre brazos. Las diferencias de la tabla de clases son indicativas, no concluyentes.
+- **Un solo repo** (`thereelcapital`, con 7 commits base). No se puede extrapolar.
+- **Secciones inyectadas en vez de setup completo en D0s+c:** el `CLAUDE.md` de las copias es el de v2 más las 12 líneas del setup de pr223 (que habla de `bun test ./src/lib ./scripts` y de las skills de esa copia, no de las de cada una). No se midió un setup nuevo por copia. El setup real se corrió una sola vez.
+- **La mejora no se puede atribuir a la skill** (0 invocaciones). No se midió un brazo «solo las secciones, sin plugin».
+- Misma configuración de v3 (`--setting-sources project`, `--strict-mcp-config`); no se verificó qué instrucciones de usuario llegan al modelo, igual que en v3.
+- D1v2 sin revisión usó `strong_model: sonnet` (sin efecto aquí porque no se pidió ninguna revisión) y el host que contesta la primera opción.
+- El «último test visible» se extrae del transcript (último resumen de `bun test` con tests que pasan), y la clasificación de fallos es automática por texto.
+
+## Bugs y observaciones del plugin (sin cambios de código en esta PR)
+
+1. **`wf-contract-check.mjs` no está en el `PATH` de `Bash` con `--plugin-dir` en `-p`** (o al menos el modelo no lo encontró). Dos ejecuciones lo buscaron con `find /`. La skill `contract-first` y el setup dicen que está en el `PATH`; si no lo está, hay que dar la ruta completa. El texto de la sección de `CLAUDE.md` que escribe el setup («ejecuta `wf-contract-check.mjs`») no lleva comando completo.
+2. **La puerta de contrato de `/task` comprueba nombres compuestos como texto literal.** En ciega pr223 (D1v2 sin revisión) el contrato pedía `actions.updateName` (clave de objeto en `+page.server.ts`); la puerta buscó el texto literal `actions.updateName` como palabra y rechazó dos formas válidas de código (literal inline y constante), así que el modelo acabó añadiendo un comentario con ese texto para que pasara. La puerta debería aceptar el último segmento del nombre o la forma de clave.
+3. **El setup añadió un ADR solo porque `wf-setup-finish` rechazaba sin `docs/adr/`.** El resumen del setup lo dice así: el modelo creó un ADR para pasar la comprobación, aunque el código lo justificaba. Se puede considerar un efecto secundario del chequeo.
+4. **`/setup` en `-p` sigue necesitando `bypassPermissions`** (sin cambios desde v2).
+5. **El modelo no carga `contract-first` aunque su descripción está visible.** El `CLAUDE.md` la nombra («sigue la skill»), pero el modelo hizo las acciones de las viñetas sin cargarla. Si se quiere medir su lista de validación hay que ponerla en el `CLAUDE.md` o en un hook de contexto.
+
+## Fuera de alcance
+
+- Un segundo repo.
+- Repetir D1v2 sin revisión con n>1.
+- Un brazo con solo las dos secciones y sin plugin (para separar el efecto de las secciones del de la skill).
+- Cambiar el plugin: los bugs de arriba solo se describen.
+
+## Reproducir
+
+Scratchpad de la sesión (`eval-v4/`), fuera del repo: `tools/run4.sh <D0sc|D1n> <b|h> <pr> <rep>` (copia limpia de `setup/pr<N>` de v2, añade las secciones en D0sc, corre y corrige con `grade2.sh`), `tools/agg4.py` (tabla), `tools/classify4.py` (clases de fallo), `tools/use.py` (uso de la skill) y `tools/setup-prompt4.txt` (setup real). Reutiliza `data/`, `src-repo/` y `setup/` de `eval-v2/`. Los resultados crudos no se suben.
