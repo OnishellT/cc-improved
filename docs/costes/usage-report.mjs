@@ -36,6 +36,7 @@ async function transcripts(root) {
 /** Each message once (a message can span several lines: keep the largest counts), plus agent id -> subagent type. */
 async function scan(root) {
   const messages = new Map();
+  const skipped = new Map(); // model with no rate -> ids of its messages in the window
   const agentCalls = new Map();
   const agentType = new Map();
   for (const file of (await transcripts(root)).sort()) {
@@ -54,8 +55,16 @@ async function scan(root) {
         }
         const u = d.message.usage;
         const model = d.message.model;
-        if (!u || !(model in RATES) || typeof d.timestamp !== "string") continue;
+        if (!u || typeof d.timestamp !== "string") continue;
         const key = d.message.id ?? d.uuid;
+        if (!(model in RATES)) {
+          // Left out of the total, so say so: a new model must not make the total silently low. `<synthetic>` is no model.
+          const day = d.timestamp.slice(0, 10);
+          if (typeof model === "string" && !model.startsWith("<") && day >= values.since && day <= values.until) {
+            skipped.set(model, (skipped.get(model) ?? new Set()).add(key));
+          }
+          continue;
+        }
         const r = messages.get(key) ?? { ts: d.timestamp, model, sub, file, inp: 0, out: 0, cr: 0, cw: 0, think: 0 };
         r.inp = Math.max(r.inp, num(u.input_tokens));
         r.out = Math.max(r.out, num(u.output_tokens));
@@ -73,7 +82,7 @@ async function scan(root) {
       }
     }
   }
-  return { messages: [...messages.values()], agentType };
+  return { messages: [...messages.values()], agentType, skipped };
 }
 
 const usd = (n, width = 9) => `$${n.toFixed(2).padStart(width)}`;
@@ -88,7 +97,7 @@ function group(rows, keyOf) {
   return [...g].sort((a, b) => b[1][1] - a[1][1]);
 }
 
-const { messages, agentType } = await scan(values.root);
+const { messages, agentType, skipped } = await scan(values.root);
 const rows = messages
   .filter((m) => m.ts.slice(0, 10) >= values.since && m.ts.slice(0, 10) <= values.until)
   .sort((a, b) => (a.file === b.file ? a.ts.localeCompare(b.ts) : a.file.localeCompare(b.file)));
@@ -107,7 +116,7 @@ const table = (title, groups, limit = 10) => {
 };
 
 out.push(`${rows.length} assistant turns from ${values.since} to ${values.until}: estimated $${sum.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} at list price`);
-table("by day (UTC)", group(rows, (m) => m.ts.slice(0, 10)).sort((a, b) => (a[0] < b[0] ? -1 : 1)), 31);
+table("by day (UTC)", group(rows, (m) => m.ts.slice(0, 10)).sort((a, b) => (a[0] < b[0] ? -1 : 1)), Infinity);
 table("by model, main vs subagent", group(rows, (m) => `${m.model.replace("claude-", "")} ${m.sub ? "sub" : "main"}`));
 
 out.push("", "== by context size of the turn ==");
@@ -161,4 +170,8 @@ if (agentCost.size) {
 const outTokens = rows.reduce((s, m) => s + m.out, 0);
 const thinking = rows.reduce((s, m) => s + m.think, 0);
 out.push("", `thinking tokens: ${(thinking / 1e6).toFixed(2)}M of ${(outTokens / 1e6).toFixed(2)}M output (${((thinking / Math.max(outTokens, 1)) * 100).toFixed(0)}%)`);
+if (skipped.size) {
+  const list = [...skipped].map(([model, ids]) => `${model} (${ids.size} turns)`).join(", ");
+  out.push("", `warning: no rate for ${list}; those turns are left out, so the total is a lower bound`);
+}
 console.log(out.join("\n"));

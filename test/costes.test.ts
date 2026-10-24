@@ -90,6 +90,23 @@ test("apply-global creates a missing settings.json as 0600 and writes through a 
   assert.equal(await readFile(real, "utf8"), "@RTK.md\n@cost-hygiene.md\n");
 });
 
+test("apply-global keeps a different existing file as a backup, once, before replacing it", async () => {
+  const dir = await home();
+  const mine = path.join(dir, "agents/issue-implementer.md");
+  await mkdir(path.dirname(mine), { recursive: true });
+  await writeFile(mine, "my own implementer\n");
+
+  assert.match((await run(apply, ["--home", dir])).stdout, /^updated +\S+issue-implementer\.md$/m);
+  assert.equal(await readFile(`${mine}.pre-cost-controls`, "utf8"), "my own implementer\n");
+  assert.equal(await readFile(mine, "utf8"), await readFile(agent, "utf8"));
+
+  // a later run replaces nothing, so the backup still holds the user's file and not our earlier copy
+  await run(apply, ["--home", dir]);
+  assert.equal(await readFile(`${mine}.pre-cost-controls`, "utf8"), "my own implementer\n");
+  // a file that did not exist before has nothing to back up
+  await assert.rejects(stat(path.join(dir, "cost-hygiene.md.pre-cost-controls")));
+});
+
 test("the global implementer agent runs on sonnet with a one-hour prompt cache", async () => {
   const text = await readFile(agent, "utf8");
   const frontmatter = /^---\n([\s\S]*?)\n---\n/.exec(text)?.[1] ?? "";
@@ -124,6 +141,8 @@ test("usage-report prices each message once, finds the cold rebuild and names th
       // Ten idle minutes later the whole 100k context is written again: $0.2246, of which $0.2129 over a warm read.
       assistant("m2", "2026-10-21T10:10:00Z", { cache_creation_input_tokens: 100_000 }),
       assistant("m3", "2026-10-21T10:11:00Z", { output_tokens: 1000 }, [], "<synthetic>"),
+      // A real model with no rate is left out of the total, and the report says so.
+      assistant("m4", "2026-10-21T10:12:00Z", { output_tokens: 5 }, [], "claude-future-9"),
     ].join("\n"),
   );
   // The subagent: 100k output on Sonnet is $1.00.
@@ -141,6 +160,10 @@ test("usage-report prices each message once, finds the cold rebuild and names th
   assert.match(all, /== subagents: 1 agents, \$1\.00 /);
   assert.match(all, /agents= +1 +avg=\$1\.00 +issue-implementer$/m);
 
+  assert.match(all, /^warning: no rate for claude-future-9 \(1 turns\); .*lower bound$/m);
+  assert.doesNotMatch(all, /synthetic/);
+
   const none = (await run(report, ["--root", root, "--since", "2026-10-22"])).stdout;
   assert.match(none, /^0 assistant turns .* estimated \$0\.00 at list price$/m);
+  assert.doesNotMatch(none, /warning/); // the skipped turn is outside the window
 });

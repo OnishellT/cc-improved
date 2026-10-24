@@ -22,11 +22,11 @@ Qué lo causó, de mayor a menor:
 
 | Dónde | Qué | Efecto |
 |---|---|---|
-| `~/.claude/settings.json` | `autoCompactWindow: 200000`; `effortLevel: medium` para Sonnet 5.5 y Opus 5.5 (`modelSettings`); `CLAUDE_CODE_SUBAGENT_MODEL=sonnet` | contexto topado en torno a 200k; sin `xhigh`; los subagentes sin modelo propio usan Sonnet |
+| `~/.claude/settings.json` | `autoCompactWindow: 200000`; `effortLevel: medium` para Sonnet 5.5 y Opus 5.5 (`modelSettings`); `CLAUDE_CODE_SUBAGENT_MODEL=sonnet` | contexto topado en torno a 200k; sin `xhigh`; los subagentes sin modelo propio usan Sonnet (el tope y lo de los subagentes, esperados: no verificados en vivo) |
 | `~/.claude/cost-hygiene.md` | reglas cortas, importadas desde `~/.claude/CLAUDE.md` | modelos de subagentes, esperas acotadas, salida acotada, relevo pasados ≈150k tokens |
 | `~/.claude/agents/issue-implementer.md` | Sonnet, `medium`, `experimental.cacheTtl: 1h` | los implementadores aguantan esperas de hasta una hora sin reconstruir la caché |
 
-Los tres vienen de `global/` y los instala `apply-global.mjs` (idempotente; `--dry-run` para ver qué haría). Guarda la configuración original como `~/.claude/settings.json.pre-cost-controls`. `/setup` no toca la configuración global: la instalación es manual.
+Los tres vienen de `global/` y los instala `apply-global.mjs` (idempotente; `--dry-run` para ver qué haría). Lo que reemplaza lo guarda una vez como `<archivo>.pre-cost-controls` (por ejemplo `~/.claude/settings.json.pre-cost-controls`). `/setup` no toca la configuración global: la instalación es manual.
 
 Notas:
 
@@ -56,4 +56,6 @@ Análisis aparte (simulación que revalora los mismos tokens de la línea base; 
 
 `patches/thereelcapital-pr-status.patch` hace que `scripts/pr-status.sh --wait` vuelva a los 4 minutos (`PR_STATUS_WAIT_MAX`) con el estado hasta ese momento, y actualiza `CLAUDE.md`, `CONTRIBUTING.md` y `docs/runbook.md`. **No está aplicado**: en ese repo un cambio de código exige PR con la puerta de revisión local, y el nombre de la rama necesita un número de issue. Aplicarlo desde un checkout actualizado de `main` de thereelcapital: `git apply <ruta>/thereelcapital-pr-status.patch`.
 
-Cubre las esperas de CI; las de revisión (hasta 90 minutos) las cubre la caché de 1 hora del implementador. Se probó con un `gh` falso: el tope salta justo al agotar el presupuesto y un error real de `gh` sigue propagándose.
+Cubre las esperas de CI. Las de revisión (hasta 90 minutos) solo las cubre la caché de 1 hora si el implementador hace alguna petición antes de que pase la hora: cada lectura de la caché renueva su plazo, y tras una hora de inactividad continua se reconstruye igual. Se probó con un `gh` falso: el tope salta justo al agotar el presupuesto y un error real de `gh` sigue propagándose.
+
+Límite conocido: durante la espera inicial hasta que aparezcan los checks (hasta 60 s) el parche no vigila el presupuesto, así que con `PR_STATUS_WAIT_MAX` por debajo de unos 65 s la espera total puede pasarlo. Con el valor por defecto (240 s) no ocurre. Conviene corregirlo al aplicar el parche.

@@ -4,10 +4,11 @@
 //   2. copies global/cost-hygiene.md and imports it from CLAUDE.md
 //   3. copies global/issue-implementer.md to agents/
 // A missing settings.json is created. A target that is a symlink is written through, not replaced. cost-hygiene.md and
-// agents/issue-implementer.md are overwritten when they differ: they come from this repo.
+// agents/issue-implementer.md are overwritten when they differ (they come from this repo); the first copy of a file
+// that gets replaced is kept as <file>.pre-cost-controls.
 // Run as: node docs/costes/apply-global.mjs [--dry-run] [--home ~/.claude]
-// Roll back: restore settings.json.pre-cost-controls, delete the import line in CLAUDE.md, cost-hygiene.md and
-// agents/issue-implementer.md.
+// Roll back: restore the *.pre-cost-controls copies, delete the import line in CLAUDE.md and delete the installed files
+// that have no copy (cost-hygiene.md, agents/issue-implementer.md).
 import { chmod, copyFile, mkdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import * as path from "node:path";
@@ -47,12 +48,19 @@ async function write(file, text, newMode = 0o644) {
   await rename(tmp, target);
 }
 
+/** Keeps the first copy of a file that is about to be replaced, so a roll back can restore it. */
+async function keep(file) {
+  const backup = `${file}.pre-cost-controls`;
+  if (!(await stat(backup).catch(() => undefined))) await copyFile(file, backup);
+}
+
 async function install(src, dst) {
   const text = await readFile(src, "utf8");
   const old = await read(dst);
   const state = old === text ? "unchanged" : old === undefined ? "created" : "updated";
   if (state !== "unchanged" && !dryRun) {
     await mkdir(path.dirname(dst), { recursive: true });
+    if (old !== undefined) await keep(dst);
     await write(dst, text);
   }
   say(dst, state);
@@ -66,8 +74,7 @@ const before = JSON.stringify(settings);
 const fragment = JSON.parse(await readFile(path.join(here, "global/settings.fragment.json"), "utf8"));
 const changed = JSON.stringify(merge(settings, fragment)) !== before;
 if (changed && !dryRun) {
-  const backup = `${settingsFile}.pre-cost-controls`;
-  if (original !== undefined && !(await stat(backup).catch(() => undefined))) await copyFile(settingsFile, backup);
+  if (original !== undefined) await keep(settingsFile);
   await mkdir(home, { recursive: true });
   await write(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, 0o600);
 }
