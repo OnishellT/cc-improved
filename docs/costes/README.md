@@ -13,8 +13,8 @@ $654,77 en tres días, unos $218 al día. Por modelo: Fable 31 %, Opus 35 %, Son
 Qué lo causó, de mayor a menor:
 
 1. **Sesiones largas.** Un 47 % del gasto fue en turnos con más de 200k tokens de contexto. Cada turno relee todo el contexto, así que el coste crece con el cuadrado de la longitud de la sesión. Análisis aparte: una sesión llegó a 553 turnos y 946k tokens y gastó $82 de sus $85 por encima de 200k, y en total hubo 10 compactaciones.
-2. **Modelo.** Las sesiones principales arrancaron en Opus (el defecto de la suscripción); cuatro pasaron a mano a Fable (limpieza de configuración, alta de un repo, diseño).
-3. **Subagentes: el 39 % del gasto.** 191 agentes `general-purpose` costaron $243 (mediana de todos los subagentes $0,27; los más caros, que implementan un issue entero, costaron $5–7 con 70–120 turnos).
+2. **Modelo.** Análisis aparte: la mayoría de las sesiones principales arrancaron en Opus (el defecto de la suscripción) y cuatro usaron Fable, elegido a mano con `/model` (limpieza de configuración, alta de un repo, diseño).
+3. **Subagentes: el 39 % del gasto.** 191 agentes `general-purpose` costaron $243 (mediana de todos los subagentes $0,27; análisis aparte: los más caros, que implementan un issue entero, costaron $5–7 con 70–120 turnos).
 4. **Reconstrucciones de caché en frío: $104.** Los subagentes cachean 5 minutos (las sesiones principales, 1 hora). Un agente que espera a CI o a una revisión más de 5 minutos reescribe todo su contexto en el turno siguiente: $64 en 241 eventos. Volver a una sesión grande tras una pausa larga cuesta lo mismo: $40 en 25 eventos. Análisis aparte: 25 agentes con 4 o más esperas largas pagaron $49,66 de esos $64.
 5. **Esfuerzo.** Los tres días corrieron en `medium` (Fable en `high`); `xhigh` se fijó como defecto el 2026-10-24, lo que solo puede sumar.
 
