@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc-improved final configuration</title>
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --ink:#1b2430; --muted:#5b6675; --line:#c9d0da;
+  --setup:#7c5cff; --setup-bg:#efeaff;
+  --cheap:#0f9d7a; --cheap-bg:#e3f6f0;
+  --risk:#d9822b; --risk-bg:#fff1e0;
+  --bad:#c0392b; --ok:#1e8e3e; --warn:#b7791f; --none:#6b7280;
+  --token:#ff3b6b;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#10141a; --panel:#181e27; --ink:#e8edf4; --muted:#9aa6b6; --line:#2e3846;
+    --setup:#a58bff; --setup-bg:#241d44;
+    --cheap:#37c9a4; --cheap-bg:#0f2f28;
+    --risk:#f0a050; --risk-bg:#3a2813;
+    --bad:#ff7a6b; --ok:#5bd37a; --warn:#e0b04a; --none:#9aa3b2;
+    --token:#ff5c85;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10141a; --panel:#181e27; --ink:#e8edf4; --muted:#9aa6b6; --line:#2e3846;
+  --setup:#a58bff; --setup-bg:#241d44; --cheap:#37c9a4; --cheap-bg:#0f2f28;
+  --risk:#f0a050; --risk-bg:#3a2813; --bad:#ff7a6b; --ok:#5bd37a; --warn:#e0b04a; --none:#9aa3b2; --token:#ff5c85;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:1120px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:clamp(1.5rem,3.2vw,2.1rem);margin:0 0 6px}
+.lead{color:var(--muted);margin:0 0 20px;max-width:70ch}
+.verdict{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:0 0 24px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.verdict .card b{display:block;font-size:1.5rem;line-height:1.2}
+.verdict .card span{color:var(--muted);font-size:.92rem}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 12px}
+button,select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;cursor:pointer}
+button:hover,select:hover{border-color:var(--cheap)}
+button:focus-visible,select:focus-visible,input:focus-visible,.node:focus-visible{outline:3px solid var(--token);outline-offset:2px}
+button.primary{background:var(--cheap);color:#fff;border-color:var(--cheap);font-weight:600}
+label.chk{display:flex;gap:6px;align-items:center;color:var(--muted);font-size:.95rem}
+.diagram{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:8px;overflow-x:auto}
+svg{display:block;width:100%;min-width:760px;height:auto}
+.band{rx:18;ry:18;fill-opacity:.55;stroke-width:1.2}
+.bandlabel{font-size:13px;font-weight:700;letter-spacing:.04em;text-anchor:end}
+.node{cursor:pointer}
+.node rect,.node polygon{fill:var(--panel);stroke-width:2;transition:fill .25s,stroke-width .25s,filter .25s}
+.node text{fill:var(--ink);font-size:13px;text-anchor:middle;pointer-events:none}
+.node .t1{font-weight:700;font-size:13.5px}
+.node .t2{font-size:11.5px;fill:var(--muted)}
+.node:hover rect,.node:hover polygon{stroke-width:3.2}
+.node.active rect,.node.active polygon{stroke-width:4;filter:drop-shadow(0 0 7px var(--token))}
+.node.done rect,.node.done polygon{fill-opacity:1}
+.k-setup rect{stroke:var(--setup)} .k-cheap rect,.k-cheap polygon{stroke:var(--cheap)} .k-risk rect{stroke:var(--risk)}
+.node.done.k-setup rect{fill:var(--setup-bg)} .node.done.k-cheap rect,.node.done.k-cheap polygon{fill:var(--cheap-bg)} .node.done.k-risk rect{fill:var(--risk-bg)}
+.node.optional rect{stroke-dasharray:6 5}
+.edge{fill:none;stroke:var(--line);stroke-width:2.4;stroke-linecap:round}
+.edge.dash{stroke-dasharray:3 6}
+.edge.lit{stroke:var(--token)}
+.elabel{font-size:11.5px;fill:var(--muted);text-anchor:middle}
+.token{fill:var(--token);filter:drop-shadow(0 0 6px var(--token));opacity:0}
+.token.on{opacity:1}
+.detail{margin:14px 0 28px;min-height:132px}
+.detail h3{margin:0 0 4px;font-size:1.1rem}
+.detail p{margin:4px 0}
+.badge{display:inline-block;font-size:.78rem;font-weight:700;padding:2px 9px;border-radius:99px;color:#fff;margin-right:6px;vertical-align:1px}
+.b-ok{background:#1e7a38} .b-warn{background:#8a5a00} .b-none{background:#5d6674} .b-bad{background:#b03024}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .badge{color:#0d1117}
+  :root:not([data-theme="light"]) .b-ok{background:var(--ok)} :root:not([data-theme="light"]) .b-warn{background:var(--warn)}
+  :root:not([data-theme="light"]) .b-none{background:var(--none)} :root:not([data-theme="light"]) .b-bad{background:var(--bad)}}
+h2{font-size:1.25rem;margin:32px 0 8px}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}
+.row{display:grid;grid-template-columns:150px 1fr 60px;gap:10px;align-items:center;margin:9px 0;font-size:.92rem}
+.row .name{font-weight:600}
+.row.rec .name::after{content:" ★";color:var(--cheap)}
+.track{position:relative;height:20px;background:var(--bg);border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:6px;background:var(--none);transition:width 1s cubic-bezier(.2,.8,.2,1)}
+.fill.rec{background:var(--cheap)} .fill.bad{background:var(--risk)}
+.whisker{position:absolute;top:50%;height:2px;background:var(--ink);opacity:.8;transform:translateY(-50%);transition:left 1s,width 1s}
+.whisker::before,.whisker::after{content:"";position:absolute;top:-4px;width:2px;height:10px;background:var(--ink)}
+.whisker::before{left:0}.whisker::after{right:0}
+.val{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+.note{color:var(--muted);font-size:.88rem;margin:8px 0 0}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+ul.clean{margin:6px 0 0;padding-left:20px} ul.clean li{margin:4px 0}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.chip{border:1px solid var(--line);border-radius:99px;padding:3px 12px;font-size:.88rem;background:var(--bg)}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;overflow:auto;font-size:.85rem;margin:8px 0 0}
+.sr{position:absolute;left:-9999px}
+@media (prefers-reduced-motion:reduce){.fill,.whisker,.node rect,.node polygon{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Final configuration: cheap model + opus setup</h1>
+  <p class="lead">What worked best in the evals: one big setup done once, then the cheap model working directly. The full flow with gates and review is kept for risky tasks only. Press ▶ to watch a task walk through the diagram, or click any box.</p>
+
+  <section class="verdict" aria-label="Summary">
+    <div class="card"><b>~$0.26</b><span>per 10 tasks with the cheap model (with or without setup)</span></div>
+    <div class="card"><b>~$0.65</b><span>the opus setup, once per project</span></div>
+    <div class="card"><b>2× to 9×</b><span>what the full flow costs, with no measured test improvement</span></div>
+  </section>
+
+  <div class="toolbar" role="group" aria-label="Animation controls">
+    <button id="play" class="primary" aria-pressed="false">▶ Play</button>
+    <button id="step">Step ›</button>
+    <button id="reset">↺ Reset</button>
+    <select id="kind" aria-label="Task type">
+      <option value="normal">Normal task</option>
+      <option value="risk">Risky task</option>
+    </select>
+    <label class="chk"><input type="checkbox" id="fail"> Simulate verify failing once</label>
+    <label class="chk">Speed <input type="range" id="speed" min="0.5" max="2.5" step="0.25" value="1" aria-label="Speed"></label>
+  </div>
+
+  <div class="diagram">
+  <svg id="svg" viewBox="0 0 1080 580" role="img" aria-labelledby="svgt svgd">
+    <title id="svgt">Recommended workflow</title>
+    <desc id="svgd">Once per project: setup with opus. Each task: ticket with the interface, the cheap model reads CLAUDE.md, writes the contract, implements, verifies and retries at most once. If risky, the plan flow with model-free gates is used.</desc>
+
+    <!-- bands -->
+    <rect class="band" x="14" y="14" width="1052" height="148" style="fill:var(--setup-bg);stroke:var(--setup)"/>
+    <text class="bandlabel" x="1048" y="38" style="fill:var(--setup)">ONCE PER PROJECT · big model (opus) · ~$0.65</text>
+    <rect class="band" x="14" y="176" width="1052" height="256" style="fill:var(--cheap-bg);stroke:var(--cheap)"/>
+    <text class="bandlabel" x="1048" y="200" style="fill:var(--cheap)">EACH TASK · cheap model (claude-haiku-5-5) · ~$0.03</text>
+    <rect class="band" x="14" y="446" width="1052" height="124" style="fill:var(--risk-bg);stroke:var(--risk)"/>
+    <text class="bandlabel" x="1048" y="470" style="fill:var(--risk)">ONLY IF RISKY · /task flow</text>
+
+    <!-- edges -->
+    <path id="e_A1A2" class="edge" d="M270,102 L400,102"/>
+    <path id="e_A2A3" class="edge" d="M640,102 L770,102"/>
+    <path id="e_A3B1" class="edge dash" d="M905,134 V169 H100 V240"/>
+    <path id="e_B1B2" class="edge" d="M170,272 L195,272"/>
+    <path id="e_B2B3" class="edge" d="M335,272 L360,272"/>
+    <path id="e_B3B4" class="edge" d="M500,272 L525,272"/>
+    <path id="e_B4B5" class="edge" d="M665,272 L690,272"/>
+    <path id="e_B5D" class="edge" d="M830,272 L863,272"/>
+    <path id="e_Dyes" class="edge" d="M925,312 L925,350"/>
+    <path id="e_Dno" class="edge dash" d="M925,232 V214 H595 V240"/>
+    <path id="e_B1C1" class="edge dash" d="M100,304 V490"/>
+    <path id="e_C1C2" class="edge" d="M290,522 L330,522"/>
+    <path id="e_C2B4" class="edge dash" d="M460,490 V440 H595 V304"/>
+    <path id="e_C2C3" class="edge dash" d="M590,522 L630,522"/>
+    <text class="elabel" x="950" y="336">yes</text>
+    <text class="elabel" x="760" y="231">no · retry (max 1 more)</text>
+    <text class="elabel" x="60" y="396">if risky</text>
+
+    <!-- nodes A -->
+    <g class="node k-setup" id="A1" tabindex="0" role="button"><rect x="70" y="70" width="200" height="64" rx="12"/><text class="t1" x="170" y="98">Your repo</text><text class="t2" x="170" y="118">code + human CLAUDE.md</text></g>
+    <g class="node k-setup" id="A2" tabindex="0" role="button"><rect x="400" y="70" width="240" height="64" rx="12"/><text class="t1" x="520" y="98">/setup with opus</text><text class="t2" x="520" y="118">interviews and writes, once</text></g>
+    <g class="node k-setup" id="A3" tabindex="0" role="button"><rect x="770" y="70" width="270" height="64" rx="12"/><text class="t1" x="905" y="98">Stays in the repo</text><text class="t2" x="905" y="118">CLAUDE.md · tools/verify · skills · mode: direct</text></g>
+
+    <!-- nodes B -->
+    <g class="node k-cheap" id="B1" tabindex="0" role="button"><rect x="30" y="240" width="140" height="64" rx="12"/><text class="t1" x="100" y="268">Ticket</text><text class="t2" x="100" y="288">with the interface</text></g>
+    <g class="node k-cheap" id="B2" tabindex="0" role="button"><rect x="195" y="240" width="140" height="64" rx="12"/><text class="t1" x="265" y="268">Reads context</text><text class="t2" x="265" y="288">CLAUDE.md</text></g>
+    <g class="node k-cheap" id="B3" tabindex="0" role="button"><rect x="360" y="240" width="140" height="64" rx="12"/><text class="t1" x="430" y="268">Contract</text><text class="t2" x="430" y="288">names and validation</text></g>
+    <g class="node k-cheap" id="B4" tabindex="0" role="button"><rect x="525" y="240" width="140" height="64" rx="12"/><text class="t1" x="595" y="268">Implement</text><text class="t2" x="595" y="288">code + tests</text></g>
+    <g class="node k-cheap" id="B5" tabindex="0" role="button"><rect x="690" y="240" width="140" height="64" rx="12"/><text class="t1" x="760" y="268">Verify</text><text class="t2" x="760" y="288">verify + tools</text></g>
+    <g class="node k-cheap" id="D" tabindex="0" role="button"><polygon points="925,232 987,272 925,312 863,272"/><text class="t1" x="925" y="276">pass?</text></g>
+    <g class="node k-cheap" id="B7" tabindex="0" role="button"><rect x="845" y="350" width="160" height="56" rx="12"/><text class="t1" x="925" y="374">Done</text><text class="t2" x="925" y="392">summary to the person</text></g>
+
+    <!-- nodes C -->
+    <g class="node k-risk" id="C1" tabindex="0" role="button"><rect x="30" y="490" width="260" height="64" rx="12"/><text class="t1" x="160" y="518">Risky?</text><text class="t2" x="160" y="538">deps · migrations · sensitive paths · big</text></g>
+    <g class="node k-risk" id="C2" tabindex="0" role="button"><rect x="330" y="490" width="260" height="64" rx="12"/><text class="t1" x="460" y="518">/task: plan + gates</text><text class="t2" x="460" y="538">names · contract · verify · guards</text></g>
+    <g class="node k-risk optional" id="C3" tabindex="0" role="button"><rect x="630" y="490" width="270" height="64" rx="12"/><text class="t1" x="765" y="518">Model review</text><text class="t2" x="765" y="538">off by default · you opt in</text></g>
+
+    <circle id="token" class="token" r="9" cx="0" cy="0"/>
+  </svg>
+  </div>
+
+  <div class="card detail" id="detail" aria-live="polite">
+    <h3>Click a box</h3>
+    <p>Here you see what each step does, what it costs and <b>how much evidence there is</b> that it helps.</p>
+  </div>
+
+  <h2>What the numbers say</h2>
+  <p class="note" style="margin-top:0">Hidden tests passed out of 436, mean of the runs. The black line is the range between runs. Arms with n=1 have no range.</p>
+  <div class="charts">
+    <div class="card">
+      <div class="toolbar" style="margin-bottom:4px"><b>Quality (tests)</b>
+        <label class="chk"><input type="checkbox" id="zoom"> zoom axis to 300–360 (truncated)</label></div>
+      <div id="chartQ"></div>
+      <p class="note" id="zoomnote">Full axis 0–436: the bars are barely distinguishable, and that is the honest picture.</p>
+    </div>
+    <div class="card">
+      <b>Cost per 10 tasks</b>
+      <div id="chartC"></div>
+      <p class="note">The opus setup (~$0.65) is paid once per project and is not included in D0s.</p>
+    </div>
+  </div>
+
+  <h2>Final configuration</h2>
+  <div class="two">
+    <div class="card">
+      <b>Do this</b>
+      <ul class="clean">
+        <li>Run <code>/cc-improved:setup</code> once (opus writes the <code>CLAUDE.md</code> and the tools).</li>
+        <li>Work with <code>claude-haiku-5-5</code> using the full id, not the alias.</li>
+        <li>Put in the ticket the <b>names, signatures and what happens on invalid input</b>.</li>
+        <li>Use <code>/task</code> only for dependencies, migrations or sensitive paths.</li>
+      </ul>
+      <pre>// .claude/workflow.json (the essentials)
+{
+  "mode": "direct",
+  "verify": ["…your project commands…"]
+  // no "review": review and plan-check off
+}</pre>
+    </div>
+    <div class="card">
+      <b>Do not use (yet)</b>
+      <div class="chips">
+        <span class="chip">reviewer by default</span><span class="chip">plan-check by default</span>
+        <span class="chip">meta-harness</span><span class="chip">RLM</span><span class="chip">fine-tuning</span>
+        <span class="chip">RTK: no measured savings</span>
+      </div>
+      <p class="note">Untested on real coding tasks at this size, or costing more than they add.</p>
+      <b style="display:block;margin-top:14px">Untested or failing</b>
+      <ul class="clean">
+        <li>The <code>contract-first</code> skill: the model never used it (0 of 30).</li>
+        <li>Input validation is still the main failure.</li>
+        <li><code>wf-contract-check</code> is not on the PATH in <code>-p</code> mode.</li>
+        <li>Only one repo and few repetitions: the +10 test gain may be noise.</li>
+      </ul>
+    </div>
+  </div>
+</main>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var svg = document.getElementById("svg");
+  var token = document.getElementById("token");
+  var detail = document.getElementById("detail");
+  var $ = function(id){return document.getElementById(id)};
+
+  var INFO = {
+    A1:{t:"Your repo",b:"Starting point: your code and, if one exists, your human-written CLAUDE.md.",c:"No cost.",e:["none","—"]},
+    A2:{t:"/setup with opus",b:"Opus walks the repo, asks a few questions and writes the context files and the verification tools (python stdlib or nix). Done once and reused.",c:"$0.52–0.98 per project (mean $0.71 over 7 setups; the last one, $0.63).",e:["warn","Cost measured. That it improves quality is NOT proven: +7.7 tests on average, within noise."]},
+    A3:{t:"Stays in the repo",b:"CLAUDE.md with two short sections (“Before finishing” and “Contract first”, 12 lines), tools in tools/verify, project skills and workflow.json with mode: direct.",c:"Re-read on every turn of the cheap model, so it is kept short.",e:["ok","A real setup generated it fine, in 12 lines (n=1)."]},
+    B1:{t:"Ticket with the interface",b:"Write in the ticket the exact names, the signature, what it takes and returns, and what happens on invalid input. This stops the cheap model from inventing names or shapes.",c:"No extra cost.",e:["ok","Largest lever measured: +28 to +39 tests out of 121 in the 3 cells with and without the hint."]},
+    B2:{t:"Reads the context",b:"The cheap model (claude-haiku-5-5, full id; the haiku alias is billed as sonnet in plan mode) reads the CLAUDE.md the setup left.",c:"~$0.026 per task (mean of the D0 runs).",e:["ok","Cost measured with n=3 per cell."]},
+    B3:{t:"Contract first",b:"Before editing, write what will be created: names, signatures, behavior on invalid input. The contract-first skill and wf-contract-check support it.",c:"Almost free.",e:["warn","The contract arm scored +10.4 tests, but the model never used the skill (0/30) and wrote contract.json in 8/30. The gain is not attributable to the skill and may be noise."]},
+    B4:{t:"Implement",b:"Writes the code and the tests. Every behavior decided for invalid input must have its test.",c:"Almost all of the task cost is spent here.",e:["bad","Input validation is the dominant failure: about 40–43 failing tests per pass, and it did not drop with the instructions."]},
+    B5:{t:"Verify",b:"Runs the manifest verify, the tools in tools/verify and wf-contract-check. It is not done if anything fails.",c:"Almost no model cost (they are commands).",e:["warn","Limit: visible tests passed in 60/60 runs and still 54/60 failed hidden tests. Verifying helps, but is not enough."]},
+    D:{t:"Pass?",b:"If it fails, one retry with the report. If it fails again, the agent ends with FAILED and tells the person. At most 2 attempts.",c:"Each retry costs another implementation pass.",e:["ok","Stopping on time saves money: failed runs make more calls (79.5 vs 61.7 per patch)."]},
+    B7:{t:"Done",b:"Short summary to the person with what was verified and what was not.",c:"—",e:["none","—"]},
+    C1:{t:"Risky?",b:"New dependencies, migrations, sensitive paths or a big change (8 files or more). If none of that, follow the normal flow above.",c:"Computed in code, no model.",e:["ok","The risk level is recorded even when it does not ask for review."]},
+    C2:{t:"/task: plan and gates",b:"Plan mode with gates that use no model: verified names, interface contract, manifest verify and guards on files outside the plan.",c:"~$0.05 per task (D1v2 without review: $0.51 per 10 tasks), about 2× the cheap model alone.",e:["warn","No measurable test improvement over the cheap model alone (329 vs 336), n=1. Its value is the guarantees, which the eval does not measure."]},
+    C3:{t:"Model review",b:"A strong-model reviewer looks at the diff. Off by default: you enable it with review.always or review.minLevel in the manifest.",c:"In D1v2 it was 63% of the cost (reviewer 37%, plan-check 26%).",e:["bad","0 fix rounds in 20 reviews, and plan-check returned FIX 16/16: they added no measurable quality."]}
+  };
+  var EV = {ok:["b-ok","Measured"],warn:["b-warn","Measured, but inconclusive"],none:["b-none","No evidence needed"],bad:["b-bad","Evidence against, or a measured failure"]};
+
+  function showInfo(id){
+    var i = INFO[id]; if(!i) return;
+    var ev = EV[i.e[0]];
+    detail.innerHTML = "<h3></h3><p></p><p><b>Cost:</b> <span class='c'></span></p><p><span class='badge "+ev[0]+"'>"+ev[1]+"</span><span class='e'></span></p>";
+    detail.querySelector("h3").textContent = i.t;
+    detail.querySelectorAll("p")[0].textContent = i.b;
+    detail.querySelector(".c").textContent = i.c;
+    detail.querySelector(".e").textContent = i.e[1];
+  }
+  Object.keys(INFO).forEach(function(id){
+    var n = $(id);
+    n.addEventListener("click", function(){ showInfo(id); });
+    n.addEventListener("keydown", function(ev){ if(ev.key==="Enter"||ev.key===" "){ev.preventDefault(); showInfo(id);} });
+  });
+
+  /* --- sequences --- */
+  function build(kind, fail){
+    var s = [["A1"],["e_A1A2","A2"],["e_A2A3","A3"],["e_A3B1","B1"]];
+    if(kind==="risk"){
+      s.push(["e_B1C1","C1"],["e_C1C2","C2"],["e_C2B4","B4"],["e_B4B5","B5"],["e_B5D","D"]);
+    }else{
+      s.push(["e_B1B2","B2"],["e_B2B3","B3"],["e_B3B4","B4"],["e_B4B5","B5"],["e_B5D","D"]);
+    }
+    if(fail){ s.push(["e_Dno","B4"],["e_B4B5","B5"],["e_B5D","D"]); }
+    s.push(["e_Dyes","B7"]);
+    return s;
+  }
+  var seq = [], idx = -1, playing = false, anim = null, timer = null;
+
+  function clearAll(){
+    document.querySelectorAll(".node").forEach(function(n){n.classList.remove("active","done")});
+    document.querySelectorAll(".edge").forEach(function(e){e.classList.remove("lit")});
+    token.classList.remove("on");
+  }
+  function reset(){
+    stopAnim(); setPlaying(false); idx = -1;
+    seq = build($("kind").value, $("fail").checked);
+    clearAll();
+  }
+  function stopAnim(){ if(anim){cancelAnimationFrame(anim);anim=null} if(timer){clearTimeout(timer);timer=null} }
+  function setPlaying(p){
+    playing = p;
+    var b = $("play"); b.textContent = p ? "⏸ Pause" : "▶ Play"; b.setAttribute("aria-pressed", String(p));
+  }
+  function arrive(id){
+    document.querySelectorAll(".node.active").forEach(function(n){n.classList.remove("active"); n.classList.add("done")});
+    var n = $(id); n.classList.remove("done"); n.classList.add("active");
+    showInfo(id);
+  }
+  function runStep(done){
+    if(idx >= seq.length-1){ if(done) done(false); return; }
+    idx++;
+    var st = seq[idx], dur = 900 / parseFloat($("speed").value);
+    if(st.length===1){ arrive(st[0]); token.classList.remove("on"); timer = setTimeout(function(){ if(done) done(true); }, reduce?200:dur*0.6); return; }
+    var path = $(st[0]); path.classList.add("lit");
+    var len = path.getTotalLength();
+    if(reduce){ arrive(st[1]); timer = setTimeout(function(){ if(done) done(true); }, 300); return; }
+    token.classList.add("on");
+    var t0 = null;
+    function frame(ts){
+      if(t0===null) t0 = ts;
+      var k = Math.min(1,(ts-t0)/(dur*Math.max(0.5,Math.min(1.6,len/150))));
+      var e = k<.5 ? 2*k*k : 1-Math.pow(-2*k+2,2)/2;
+      var p = path.getPointAtLength(len*e);
+      token.setAttribute("cx",p.x); token.setAttribute("cy",p.y);
+      if(k<1){ anim = requestAnimationFrame(frame); }
+      else { anim=null; arrive(st[1]); timer = setTimeout(function(){ if(done) done(true); }, dur*0.45); }
+    }
+    anim = requestAnimationFrame(frame);
+  }
+  function loop(){
+    if(!playing) return;
+    runStep(function(more){
+      if(!playing) return;
+      if(more){ loop(); } else { setPlaying(false); }
+    });
+  }
+  $("play").addEventListener("click", function(){
+    if(playing){ setPlaying(false); return; }
+    if(idx >= seq.length-1){ reset(); }
+    setPlaying(true); loop();
+  });
+  $("step").addEventListener("click", function(){
+    if(playing){ setPlaying(false); }
+    if(anim||timer){ stopAnim(); }
+    if(idx >= seq.length-1){ reset(); }
+    runStep(null);
+  });
+  $("reset").addEventListener("click", reset);
+  $("kind").addEventListener("change", reset);
+  $("fail").addEventListener("change", reset);
+
+  /* --- charts --- */
+  var ARMS = [
+    {n:"D0 · cheap alone",       q:328.7, lo:319, hi:345, c:0.248, k:""},
+    {n:"D0s · + setup",          q:336.3, lo:329, hi:343, c:0.252, k:""},
+    {n:"D0s + contract",         q:346.7, lo:343, hi:350, c:0.264, k:"rec"},
+    {n:"D1v2 no review",      q:329,   lo:null,hi:null,c:0.506, k:"bad"},
+    {n:"D1v2 with review",      q:333,   lo:null,hi:null,c:2.12,  k:"bad"},
+    {n:"D1 v1 (full plugin)",q:337,   lo:null,hi:null,c:2.41,  k:"bad"}
+  ];
+  function mk(host, rows){ host.innerHTML=""; rows.forEach(function(r){
+    var d=document.createElement("div"); d.className="row"+(r.k==="rec"?" rec":"");
+    d.innerHTML="<div class='name'></div><div class='track'><div class='fill "+r.k+"'></div><div class='whisker' style='display:none'></div></div><div class='val'></div>";
+    d.querySelector(".name").textContent=r.n; d.querySelector(".val").textContent=r.v; host.appendChild(d);
+  }); }
+  function drawQ(){
+    var zoom=$("zoom").checked, min=zoom?300:0, max=zoom?360:436, host=$("chartQ");
+    if(!host.children.length) mk(host, ARMS.map(function(a){return {n:a.n,k:a.k,v:a.q.toFixed(1)}}));
+    [].forEach.call(host.querySelectorAll(".row"), function(row,i){
+      var a=ARMS[i], f=row.querySelector(".fill"), w=row.querySelector(".whisker");
+      var pct=function(x){return Math.max(0,Math.min(100,(x-min)/(max-min)*100))};
+      f.style.width=pct(a.q)+"%";
+      if(a.lo!==null){ w.style.display="block"; w.style.left=pct(a.lo)+"%"; w.style.width=(pct(a.hi)-pct(a.lo))+"%"; } else { w.style.display="none"; }
+    });
+    $("zoomnote").textContent = zoom ? "Axis truncated to 300–360: it exaggerates differences. The ranges of D0, D0s and D0s+contract almost fully overlap." : "Full axis 0–436: the bars are barely distinguishable, and that is the honest picture.";
+  }
+  function drawC(){
+    var host=$("chartC"), max=2.5;
+    if(!host.children.length) mk(host, ARMS.map(function(a){return {n:a.n,k:a.k,v:"$"+a.c.toFixed(2)}}));
+    [].forEach.call(host.querySelectorAll(".row"), function(row,i){
+      row.querySelector(".fill").style.width=(ARMS[i].c/max*100)+"%";
+    });
+  }
+  $("zoom").addEventListener("change", drawQ);
+  function reveal(){ drawQ(); drawC(); }
+  if(reduce){ reveal(); }
+  else if("IntersectionObserver" in window){
+    mk($("chartQ"), ARMS.map(function(a){return {n:a.n,k:a.k,v:a.q.toFixed(1)}}));
+    mk($("chartC"), ARMS.map(function(a){return {n:a.n,k:a.k,v:"$"+a.c.toFixed(2)}}));
+    var shown=false, go=function(){ if(!shown){ shown=true; reveal(); } };
+    var io=new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ go(); io.disconnect(); } }); },{threshold:.25});
+    io.observe($("chartQ"));
+    setTimeout(go, 2500); /* fallback: if the observer does not fire, the bars still appear */
+  } else { reveal(); }
+
+  reset();
+  showInfo("A2");
+})();
+</script>
+</body>
+</html>
