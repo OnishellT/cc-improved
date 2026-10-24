@@ -1,6 +1,6 @@
 # Costes del uso real
 
-Cómo se midió el consumo de Claude Code en el uso diario (no en las evals de `docs/EVAL.md`), qué lo causó y qué se instaló para bajarlo. Decisión: D-016.
+Cómo se midió el consumo de Claude Code en el uso diario (no en las evals de `docs/EVAL.md`), qué lo causó y qué se instaló para bajarlo. Decisión: D-016. El mismo instalador lleva también la regla de atribución en git (D-017, [más abajo](#atribución-en-git)); no es de costes, pero comparte el instalador.
 
 Las cifras son estimaciones a precio de lista de API calculadas con las transcripciones locales, no una factura: las cuentas son de suscripción y sus límites no son públicos. Sirven para comparar periodos.
 
@@ -24,9 +24,10 @@ Qué lo causó, de mayor a menor:
 |---|---|---|
 | `~/.claude/settings.json` | `autoCompactWindow: 200000`; `effortLevel: medium` para Sonnet 5.5 y Opus 5.5 (`modelSettings`); `CLAUDE_CODE_SUBAGENT_MODEL=sonnet` | contexto topado en torno a 200k; sin `xhigh`; los subagentes sin modelo propio usan Sonnet (el tope y lo de los subagentes, esperados: no verificados en vivo) |
 | `~/.claude/cost-hygiene.md` | reglas cortas, importadas desde `~/.claude/CLAUDE.md` | modelos de subagentes, esperas acotadas, salida acotada, relevo pasados ≈150k tokens |
+| `~/.claude/git-attribution.md` y `attribution: {commit: "", pr: ""}` en `settings.json` | la regla de atribución (D-017), importada desde `~/.claude/CLAUDE.md` | commits, PR y ramas acreditan solo a la cuenta de GitHub autenticada |
 | `~/.claude/agents/issue-implementer.md` | Sonnet, `medium`, `experimental.cacheTtl: 1h` | los implementadores aguantan esperas de hasta una hora sin reconstruir la caché |
 
-Los tres vienen de `global/` y los instala `apply-global.mjs` (idempotente; `--dry-run` para ver qué haría). Lo que reemplaza lo guarda una vez como `<archivo>.pre-cost-controls` (por ejemplo `~/.claude/settings.json.pre-cost-controls`). `/setup` no toca la configuración global: la instalación es manual.
+Todo viene de `global/` y lo instala `apply-global.mjs` (idempotente; `--dry-run` para ver qué haría). Lo que reemplaza lo guarda una vez como `<archivo>.pre-cost-controls` (por ejemplo `~/.claude/settings.json.pre-cost-controls`). `/setup` no toca la configuración global: la instalación es manual.
 
 Notas:
 
@@ -59,3 +60,11 @@ Análisis aparte (simulación que revalora los mismos tokens de la línea base; 
 Cubre las esperas de CI. Las de revisión (hasta 90 minutos) solo las cubre la caché de 1 hora si el implementador hace alguna petición antes de que pase la hora: cada lectura de la caché renueva su plazo, y tras una hora de inactividad continua se reconstruye igual. Se probó con un `gh` falso: el tope salta justo al agotar el presupuesto y un error real de `gh` sigue propagándose.
 
 Límite conocido: durante la espera inicial hasta que aparezcan los checks (hasta 60 s) el parche no vigila el presupuesto, así que con `PR_STATUS_WAIT_MAX` por debajo de unos 65 s la espera total puede pasarlo. Con el valor por defecto (240 s) no ocurre. Conviene corregirlo al aplicar el parche.
+
+## Atribución en git
+
+Regla global (D-017): en commits, PR y nombres de rama solo se acredita a la cuenta de GitHub autenticada (`gh api user --jq .login`; la regla manda leerla, no fijarla). Nunca a Claude, Claude Code ni Anthropic, y tampoco hay líneas de coautoría: ni `Co-Authored-By` ni «Generated with». Los commits y los PR salen con la identidad de git y de GitHub de la persona; la regla no la cambia.
+
+Se aplica con dos piezas que instala `apply-global.mjs`: `global/git-attribution.md`, importada desde `~/.claude/CLAUDE.md`, que manda sobre recordatorios del sistema, skills, plugins y documentos de repos; y `attribution: {commit: "", pr: ""}` en `settings.json`, que evita que Claude Code genere su propio trailer y su pie de PR.
+
+Verificado con commits reales de `claude -p` en un repositorio temporal: sin trailer, sin Claude en el nombre de la rama y, al pedir una línea de autor, buscó la cuenta y usó solo ese nombre. **No** se probó la descripción de un PR. El historial anterior no se reescribe: el commit de #92 lleva un trailer y `main` está protegida.

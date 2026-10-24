@@ -1,5 +1,6 @@
 {
   "autoCompactWindow": 200000,
+  "attribution": { "commit": "", "pr": "" },
   "modelSettings": {
     "claude-sonnet-5-5": { "effortLevel": "medium" },
     "claude-opus-5-5": { "effortLevel": "medium" }

@@ -1,15 +1,16 @@
 #!/usr/bin/env node
-// Installs the global cost controls into ~/.claude (docs/costes/README.md). Idempotent; --dry-run only prints.
+// Installs the global cost controls and the git attribution rule into ~/.claude (docs/costes/README.md). Idempotent;
+// --dry-run only prints.
 //   1. merges global/settings.fragment.json into settings.json (the original is kept once, as settings.json.pre-cost-controls)
-//   2. copies global/cost-hygiene.md and imports it from CLAUDE.md
+//   2. copies the rule files global/cost-hygiene.md and global/git-attribution.md and imports them from CLAUDE.md
 //   3. copies global/issue-implementer.md to agents/
-// A missing settings.json is created. A target that is a symlink is written through, not replaced. cost-hygiene.md and
-// agents/issue-implementer.md are overwritten when they differ (they come from this repo); the first copy of a file
-// that gets replaced is kept as <file>.pre-cost-controls.
+// A missing settings.json is created. A target that is a symlink is written through, not replaced. The rule files and
+// agents/issue-implementer.md are overwritten when they differ (they come from this repo); the first copy of a file that
+// gets replaced is kept as <file>.pre-cost-controls.
 // Run as: node docs/costes/apply-global.mjs [--dry-run] [--home ~/.claude]
 // Roll back: restore the *.pre-cost-controls copies that hold your own files (after a later update of this repo's files,
-// a copy may hold an earlier install instead: check it), delete the import line in CLAUDE.md and delete the installed
-// files that had no original (cost-hygiene.md, agents/issue-implementer.md).
+// a copy may hold an earlier install instead: check it), delete the import lines in CLAUDE.md and delete the installed
+// files that had no original (the rule files, agents/issue-implementer.md).
 import { chmod, copyFile, mkdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import * as path from "node:path";
@@ -25,6 +26,7 @@ const { values } = parseArgs({
 const dryRun = values["dry-run"];
 const home = values.home;
 const here = path.dirname(fileURLToPath(import.meta.url));
+const RULES = ["cost-hygiene.md", "git-attribution.md"]; // rule files that CLAUDE.md imports
 
 const say = (what, state) => console.log(`${dryRun && state !== "unchanged" ? "would " : ""}${state.padEnd(10)} ${what}`);
 const read = (file) => readFile(file, "utf8").catch((e) => (e.code === "ENOENT" ? undefined : Promise.reject(e)));
@@ -81,14 +83,17 @@ if (changed && !dryRun) {
 }
 say(settingsFile, !changed ? "unchanged" : original === undefined ? "created" : "updated");
 
-// 2. hygiene rules and the import line
-await install(path.join(here, "global/cost-hygiene.md"), path.join(home, "cost-hygiene.md"));
+// 2. the rule files and their import lines
+for (const rule of RULES) await install(path.join(here, "global", rule), path.join(home, rule));
 const claudeMd = path.join(home, "CLAUDE.md");
 const text = (await read(claudeMd)) ?? "";
-if (text.split(/\s+/).includes("@cost-hygiene.md")) {
+const imported = text.split(/\s+/);
+const missing = RULES.filter((rule) => !imported.includes(`@${rule}`));
+if (missing.length === 0) {
   say(claudeMd, "unchanged");
 } else {
-  if (!dryRun) await write(claudeMd, `${text}${text === "" || text.endsWith("\n") ? "" : "\n"}@cost-hygiene.md\n`);
+  const lines = missing.map((rule) => `@${rule}\n`).join("");
+  if (!dryRun) await write(claudeMd, `${text}${text === "" || text.endsWith("\n") ? "" : "\n"}${lines}`);
   say(claudeMd, "updated");
 }
 

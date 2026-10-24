@@ -11,6 +11,9 @@ import { fileURLToPath } from "node:url";
 const apply = fileURLToPath(new URL("../docs/costes/apply-global.mjs", import.meta.url));
 const report = fileURLToPath(new URL("../docs/costes/usage-report.mjs", import.meta.url));
 const agent = fileURLToPath(new URL("../docs/costes/global/issue-implementer.md", import.meta.url));
+const attribution = fileURLToPath(new URL("../docs/costes/global/git-attribution.md", import.meta.url));
+const conventions = fileURLToPath(new URL("../docs/CONVENTIONS.md", import.meta.url));
+const IMPORTS = "@RTK.md\n@cost-hygiene.md\n@git-attribution.md\n";
 
 function run(script: string, args: string[]): Promise<{ code: number; stdout: string }> {
   return new Promise((resolve) =>
@@ -45,17 +48,19 @@ test("apply-global merges the settings without losing keys, and a second run cha
   assert.equal(settings.modelSettings["claude-opus-5-5"].effortLevel, "medium");
   assert.equal(settings.autoCompactWindow, 200000);
   assert.equal(settings.env.CLAUDE_CODE_SUBAGENT_MODEL, "sonnet");
+  assert.deepEqual(settings.attribution, { commit: "", pr: "" });
   assert.equal(await readFile(path.join(dir, "settings.json.pre-cost-controls"), "utf8"), original);
   assert.equal((await stat(path.join(dir, "settings.json"))).mode & 0o777, 0o600);
-  assert.equal(await readFile(path.join(dir, "CLAUDE.md"), "utf8"), "@RTK.md\n@cost-hygiene.md\n");
+  assert.equal(await readFile(path.join(dir, "CLAUDE.md"), "utf8"), IMPORTS);
+  assert.equal(await readFile(path.join(dir, "git-attribution.md"), "utf8"), await readFile(attribution, "utf8"));
   assert.equal(await readFile(path.join(dir, "agents/issue-implementer.md"), "utf8"), await readFile(agent, "utf8"));
 
   const again = await run(apply, ["--home", dir]);
   assert.deepEqual(
     again.stdout.trim().split("\n").map((line) => line.split(/\s+/)[0]),
-    ["unchanged", "unchanged", "unchanged", "unchanged"],
+    ["unchanged", "unchanged", "unchanged", "unchanged", "unchanged"],
   );
-  assert.equal(await readFile(path.join(dir, "CLAUDE.md"), "utf8"), "@RTK.md\n@cost-hygiene.md\n");
+  assert.equal(await readFile(path.join(dir, "CLAUDE.md"), "utf8"), IMPORTS);
 });
 
 test("apply-global --dry-run says what it would do and writes nothing", async () => {
@@ -65,6 +70,7 @@ test("apply-global --dry-run says what it would do and writes nothing", async ()
   assert.equal(await readFile(path.join(dir, "settings.json"), "utf8"), JSON.stringify(SETTINGS, null, 2));
   assert.equal(await readFile(path.join(dir, "CLAUDE.md"), "utf8"), "@RTK.md\n");
   await assert.rejects(stat(path.join(dir, "cost-hygiene.md")));
+  await assert.rejects(stat(path.join(dir, "git-attribution.md")));
   await assert.rejects(stat(path.join(dir, "settings.json.pre-cost-controls")));
   await assert.rejects(stat(path.join(dir, "agents")));
 });
@@ -87,7 +93,7 @@ test("apply-global creates a missing settings.json as 0600 and writes through a 
   // the link is still a link to the same file, and the file carries the import
   assert.ok((await lstat(path.join(dir, "CLAUDE.md"))).isSymbolicLink());
   assert.equal(await readlink(path.join(dir, "CLAUDE.md")), real);
-  assert.equal(await readFile(real, "utf8"), "@RTK.md\n@cost-hygiene.md\n");
+  assert.equal(await readFile(real, "utf8"), IMPORTS);
 });
 
 test("apply-global keeps a different existing file as a backup, once, before replacing it", async () => {
@@ -110,6 +116,22 @@ test("apply-global keeps a different existing file as a backup, once, before rep
   assert.equal(await readFile(`${mine}.pre-cost-controls`, "utf8"), "my own implementer\n");
   // a file that did not exist before has nothing to back up
   await assert.rejects(stat(path.join(dir, "cost-hygiene.md.pre-cost-controls")));
+});
+
+test("the attribution rule credits only the authenticated account, and the conventions no longer ask for a Claude trailer", async () => {
+  const rule = await readFile(attribution, "utf8");
+  // the account is read at the time, not hardcoded in the rule
+  assert.match(rule, /`gh api user --jq \.login`/);
+  assert.doesNotMatch(rule, /OnishellT/);
+  assert.match(rule, /No `Co-Authored-By` trailer for Claude or Anthropic/);
+  assert.match(rule, /Branch names never contain Claude/);
+
+  const fragment = JSON.parse(await readFile(fileURLToPath(new URL("../docs/costes/global/settings.fragment.json", import.meta.url)), "utf8"));
+  assert.deepEqual(fragment.attribution, { commit: "", pr: "" });
+
+  const doc = await readFile(conventions, "utf8");
+  assert.doesNotMatch(doc, /Co-Authored-By: Claude/);
+  assert.match(doc, /acreditan solo a la cuenta de GitHub autenticada/);
 });
 
 test("the global implementer agent runs on sonnet with a one-hour prompt cache", async () => {

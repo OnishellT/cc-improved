@@ -129,3 +129,12 @@ Registro corto de decisiones de proceso del repo. Una entrada por decisión, con
   - Sin cambios en el plugin, sus agents ni `/setup`: la instalación es manual.
   - `docs/costes/usage-report.mjs` repite la medición; el parche de `scripts/pr-status.sh` para thereelcapital queda guardado, sin aplicar.
 - **Consecuencia:** el efecto no está medido; una simulación aparte sobre los mismos tokens da un 43–48 % menos si además se cumplen hábitos que la configuración no impone (Fable a Opus, no dejar sesiones grandes paradas, no esperar dentro de subagentes), y hay que comparar con la línea base de $218 al día. Un modelo más barato puede necesitar más turnos. El compactado automático a 200k puede perder detalle que un `/clear` con nota de relevo conservaría. El agent por archivo no lleva el prompt de sistema por defecto de Claude Code: probarlo con un issue antes de generalizar. Las cifras son precio de lista, no límites de suscripción, y estos no se publican.
+
+## D-017: los commits, los PR y las ramas acreditan solo a la cuenta de GitHub autenticada
+
+- **Contexto:** `docs/CONVENTIONS.md` exigía terminar cada commit con `Co-Authored-By: Claude Fable 5.1`. La persona usuaria fijó el 2026-10-24 una regla global en `~/.claude`: no se acredita a Claude, Claude Code ni Anthropic, y el único nombre que se acredita es el de la cuenta de GitHub autenticada. Nada en el código, los tests, los hooks ni el CI imponía el trailer: era solo una línea de convenciones.
+- **Decisión (de la persona usuaria):**
+  - `docs/CONVENTIONS.md` pasa a decir que commits, PR y ramas acreditan solo a la cuenta autenticada (`gh api user --jq .login`), sin `Co-Authored-By`, sin «Generated with» y sin Claude ni Anthropic.
+  - La regla (`docs/costes/global/git-attribution.md`) y el ajuste `attribution: {commit: "", pr: ""}` se instalan con `docs/costes/apply-global.mjs`, junto a lo de D-016.
+  - Sin cambios en el plugin ni en sus skills: `skills/pr` pide la línea de atribución «que indique la sesión», y con esta configuración la sesión no indica ninguna.
+- **Consecuencia:** el historial no se reescribe (`main` está protegida): los commits anteriores, incluidos los de #92, conservan su trailer. La regla vive en `~/.claude`, no en el plugin: sin esa configuración global, Claude Code añade su atribución por defecto. La descripción de un PR no se probó con un PR real.
