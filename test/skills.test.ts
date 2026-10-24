@@ -14,6 +14,7 @@ const METHOD = [
   "create-verification-skill",
   "maintain-verification-skill",
   "technical-writing",
+  "contract-first",
 ];
 const dirs = readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory());
 

@@ -219,10 +219,14 @@ test("review.minLevel: low level is recorded but asks for review only with minLe
   assert.match(byDefault.reasons.join(), /líneas cambiadas/);
   const high = { ...base, review: { minLevel: "high" as const } };
   assert.equal((await risk(files, task, high)).review, false);
+  assert.equal((await risk(files, task, { ...base, review: { minLevel: "off" } })).review, false);
   const low = { ...base, review: { minLevel: "low" as const } };
   assert.deepEqual([(await risk(files, task, low)).level, (await risk(files, task, low)).review], ["low", true]);
   assert.equal((await risk([["a.ts", 2]], task, low)).review, false, "no risk at all never asks");
-  assert.equal((await risk([["package.json", 3]], task)).review, true, "high asks by default");
+  assert.deepEqual([(await risk([["package.json", 3]], task)).level, (await risk([["package.json", 3]], task)).review], ["high", false], "default off (D-015): high is recorded, not reviewed");
+  assert.equal((await risk([["package.json", 3]], task, { ...base, review: { minLevel: "off" } })).review, false);
+  assert.equal((await risk([["package.json", 3]], task, high)).review, true, "minLevel high asks for a high diff");
+  assert.equal((await risk([["package.json", 3]], task, low)).review, true);
   assert.equal((await risk([["a.ts", 300]], task, { ...base, review: { minLevel: "low", never: true } })).review, false);
   assert.equal((await risk([["a.ts", 2]], task, { ...base, review: { minLevel: "high", always: true, never: true } })).review, true);
 });

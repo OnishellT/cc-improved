@@ -174,6 +174,20 @@ export function frontmatter(text) {
   return keys;
 }
 
+/** The two short sections direct mode relies on (skills/setup/SKILL.md, step 6), found by heading or by the thing each one points to. */
+const BEFORE_DONE = [/^#{1,6}\s*(before (calling a task done|finishing|done)|antes de (terminar|dar))/im, /\.claude\/workflow\.json/];
+const CONTRACT_FIRST = [/^#{1,6}\s*(contract[- ]first|contrato primero)/im, /wf-contract-check|contract-first/];
+
+/** Warnings (never failures) when CLAUDE.md lacks the "before finishing" or the "contract first" section. */
+export function claudeMdWarnings(claude) {
+  if (typeof claude !== "string" || !claude.trim()) return [];
+  const has = (patterns) => patterns.some((re) => re.test(claude));
+  const warnings = [];
+  if (!has(BEFORE_DONE)) warnings.push('CLAUDE.md has no "Before calling a task done" section (run the manifest verify and tools/verify/ tools; do not call it done if they fail). Direct mode depends on it.');
+  if (!has(CONTRACT_FIRST)) warnings.push('CLAUDE.md has no "Contract first" section (point to the contract-first skill and wf-contract-check, and say when to use /task). Direct mode depends on it.');
+  return warnings;
+}
+
 /** What is missing or malformed in the files /setup writes. Empty means complete. */
 export function checkOutputs(root, manifest) {
   const p = [];
@@ -405,6 +419,12 @@ export async function main(argv, env = process.env, cwd = process.cwd()) {
       for (const line of tools.warnings) say(`! ${line}`);
       say("");
     };
+    // Advisory only: a CLAUDE.md without the two direct-mode sections does not block the setup.
+    const docWarnings = claudeMdWarnings(read(path.join(root, "CLAUDE.md")));
+    const docReport = () => {
+      for (const line of docWarnings) say(`! ${line}`);
+      if (docWarnings.length) say("");
+    };
     let verify = manifest.verify;
     if (manifest.agentlint) {
       if (!hasAgentlintConfig(root)) problems.push(`agentlint is not configured: run \`${manifest.agentlint} init\` and add the rules the user selected.`);
@@ -417,6 +437,7 @@ export async function main(argv, env = process.env, cwd = process.cwd()) {
     }
     if (problems.length) {
       toolReport();
+      docReport();
       say("Setup incomplete:");
       for (const line of problems) say(`- ${line}`);
       say("\nFix these and run wf-setup-finish.mjs again.");
@@ -425,6 +446,7 @@ export async function main(argv, env = process.env, cwd = process.cwd()) {
 
     if (tools.tools.length) manifest.tools = tools.tools.map(({ tool }) => tool);
     toolReport();
+    docReport();
     const result = await runVerify(verify, root);
     say(formatVerify(result));
     manifest.verify = verify;

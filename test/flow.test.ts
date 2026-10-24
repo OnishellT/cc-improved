@@ -70,7 +70,7 @@ test("the full task flow, event by event, through the hooks.json commands", asyn
   await mkdir(path.join(root, "src"), { recursive: true });
   await mkdir(path.join(root, "docs", "specs"), { recursive: true });
   await mkdir(plans, { recursive: true });
-  const manifest: Manifest = { version: 1, setup: "done", verify: ["node check-jsdoc.mjs"], review: { paths: ["src/"] }, connectors: [] };
+  const manifest: Manifest = { version: 1, setup: "done", verify: ["node check-jsdoc.mjs"], review: { paths: ["src/"], minLevel: "high" }, connectors: [] };
   await mkdir(path.join(root, ".claude"), { recursive: true });
   await writeFile(path.join(root, ".claude", "workflow.json"), JSON.stringify(manifest));
   await writeFile(path.join(root, ".gitignore"), ".claude/workflow/task.json\n");

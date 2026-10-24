@@ -125,12 +125,15 @@ export function notSmallReasons(plan: Plan, rule: ReviewPolicy | undefined): str
 }
 
 /**
- * Whether the model plan check is requested. Off by default: `strong` only when the plan touches risk triggers (or
- * `review.always`); `review.plan: true` also gives big plans a `cheap` one; `review.plan: false` never. The
- * deterministic name and contract checks (`checkPlan`) always run.
+ * Whether the model plan check is requested. Off by default (D-015). It is on with `review.plan: true`, `review.always`
+ * or a `review.minLevel` of `low`/`high`: then `strong` when the plan touches risk triggers (or `review.always`), and
+ * with `review.plan: true` also a `cheap` one for big plans. `review.plan: false` never. The deterministic name and
+ * contract checks (`checkPlan`) always run.
  */
 export function planCheckLevel(plan: Plan, rule: ReviewPolicy | undefined): "strong" | "cheap" | undefined {
   if (rule?.plan === false) return undefined;
+  const optedIn = rule?.always || rule?.plan === true || rule?.minLevel === "low" || rule?.minLevel === "high";
+  if (!optedIn) return undefined;
   if (rule?.always || highRiskReasons(plan.files, rule).length) return "strong";
   if (rule?.plan !== true) return undefined;
   return notSmallReasons(plan, rule).length ? "cheap" : undefined;

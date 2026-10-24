@@ -248,13 +248,13 @@ test("low-risk diff: no review is paid, the summary says so, and an unchanged tr
 
 const mediumDiff = `${Array.from({ length: 250 }, (_, i) => `export const v${i} = ${i};`).join("\n")}\nexport const sub = (a, b) => a - b;\n`;
 
-test("medium (low-risk) diff is recorded but not reviewed by default (D-012); review.minLevel low asks for it", async () => {
+test("medium (low-risk) diff is recorded but not reviewed by default (D-012/D-015); review.minLevel low asks for it", async () => {
   const l = await lab({}, task, { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "opus" });
   await writeFile(path.join(l.root, "src", "math.js"), mediumDiff);
   await pass(l);
   const out = await run(l, await stop());
   assert.equal(out?.decision, undefined);
-  assert.match(out!.systemMessage!, /revisión omitida \(riesgo bajo registrado.*riesgo low \(.*líneas cambiadas/);
+  assert.match(out!.systemMessage!, /revisión omitida \(riesgo registrado.*riesgo low \(.*líneas cambiadas/);
   const s = await state(l);
   assert.equal(s.review?.level, "low");
   assert.equal(s.review?.requested, false);
@@ -276,7 +276,7 @@ test("review.minLevel low: a medium diff asks for the cheap reviewer; a risk tri
   assert.match(low!.reason!, /risk low: .*líneas cambiadas/);
   assert.match(low!.reason!, /Launch the `cc-improved:reviewer-sonnet` agent/);
 
-  const risky = await lab({}, task, opus);
+  const risky = await lab({ review: { minLevel: "high" } }, task, opus);
   await implement(risky);
   await writeFile(path.join(risky.root, "package.json"), "{}\n");
   await pass(risky);
@@ -354,4 +354,35 @@ test("no baseCommit and low risk: the decision is recorded and shown in the summ
   const out = await run(l, await stop());
   assert.match(out!.systemMessage!, /revisión omitida \(sin riesgo\); riesgo none/);
   assert.deepEqual((await state(l)).review, { level: "none", reasons: [], requested: false });
+});
+
+test("default manifest (D-015): a high-risk diff is recorded but no model review is requested; the deterministic gates still run", async () => {
+  const l = await lab({}, task, { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "opus" });
+  await implement(l);
+  await writeFile(path.join(l.root, "package.json"), "{}\n");
+  await pass(l);
+  const out = await run(l, await stop());
+  assert.equal(out?.decision, undefined, "no reviewer block");
+  assert.match(out!.systemMessage!, /revisión omitida \(riesgo registrado.*riesgo high \(.*dependencias/);
+  const s = await state(l);
+  assert.equal(s.review?.level, "high");
+  assert.equal(s.review?.requested, false);
+
+  const failing = await lab({}, task);
+  await implement(failing);
+  await writeFile(path.join(failing.root, "package.json"), "{}\n");
+  await fail(failing);
+  assert.match((await run(failing, await stop()))!.reason!, /verify|test -f ok/i, "a failing verify still blocks");
+  const noContract = await lab({}, task);
+  assert.match((await run(noContract, await stop()))!.reason!, /missing sub/, "a missing name still blocks");
+
+  const optIn = await lab({ review: { minLevel: "high" } }, task, { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "opus" });
+  await implement(optIn);
+  await writeFile(path.join(optIn.root, "package.json"), "{}\n");
+  await pass(optIn);
+  assert.match((await run(optIn, await stop()))!.reason!, /Launch the `cc-improved:reviewer` agent/);
+  const always = await lab({ review: { always: true, never: true } }, task, { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "opus" });
+  await implement(always);
+  await pass(always);
+  assert.match((await run(always, await stop()))!.reason!, /Launch the `cc-improved:reviewer` agent/, "always wins over never");
 });

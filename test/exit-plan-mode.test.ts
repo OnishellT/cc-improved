@@ -291,12 +291,25 @@ test("plan check thresholds are configurable in review", async () => {
   assert.equal(ignored.out, undefined, "thresholds alone do not turn the plan check on");
 });
 
-test("plan check: risky paths in the plan ask for it with the strong variant, review.always too, review.plan false never", async () => {
-  for (const file of ["package.json", "db/migrate/001_x.rb", "src/auth/login.ts"]) {
-    const risky = await checked({}, goodPlan({ files: ["a.js", "test/a.test.js", file] }));
-    assert.match(reasonOf(risky.out), /subagent_type "cc-improved:plan-check", run_in_background/, file);
+test("plan check is off by default (D-015), even for a risky plan; the deterministic plan checks still run", async () => {
+  for (const manifest of [{}, { review: {} }, { review: { minLevel: "off" as const } }, { review: { paths: ["a.js"] } }]) {
+    const risky = await checked(manifest, goodPlan({ files: ["a.js", "test/a.test.js", "package.json"] }));
+    assert.equal(risky.out, undefined, JSON.stringify(manifest));
   }
-  const paths = await checked({ review: { paths: ["a.js"] } }, goodPlan());
+  const invented = await checked({}, goodPlan({ interface: [{ file: "a.js", exports: ["notInAnyEvidence"], source: "TKT-1" }] }));
+  assert.equal(invented.out?.hookSpecificOutput?.permissionDecision, "deny", "an invented name is still denied without any opt-in");
+});
+
+test("plan check opt-in: risky paths ask for it with the strong variant (minLevel, plan true), review.always too, review.plan false never", async () => {
+  for (const optIn of [{ minLevel: "high" as const }, { minLevel: "low" as const }, { plan: true }]) {
+    for (const file of ["package.json", "db/migrate/001_x.rb", "src/auth/login.ts"]) {
+      const risky = await checked({ review: optIn }, goodPlan({ files: ["a.js", "test/a.test.js", file] }));
+      assert.match(reasonOf(risky.out), /subagent_type "cc-improved:plan-check", run_in_background/, `${JSON.stringify(optIn)} ${file}`);
+    }
+  }
+  const quiet = await checked({ review: { minLevel: "high" } }, goodPlan());
+  assert.equal(quiet.out, undefined, "an opted-in project still skips a plan with no risk and no size");
+  const paths = await checked({ review: { paths: ["a.js"], minLevel: "high" } }, goodPlan());
   assert.match(reasonOf(paths.out), /subagent_type "cc-improved:plan-check", run_in_background/);
   const always = await checked({ review: { always: true } }, goodPlan());
   assert.match(reasonOf(always.out), /subagent_type "cc-improved:plan-check", run_in_background/);
@@ -306,9 +319,9 @@ test("plan check: risky paths in the plan ask for it with the strong variant, re
 
 test("plan check variant: strong_model sonnet keeps the cheap variant even when risky; another model is passed on escalation only", async () => {
   const risky = goodPlan({ files: ["a.js", "test/a.test.js", "package.json"] });
-  const sonnet = await checked({}, risky, { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "sonnet" });
+  const sonnet = await checked({ review: { minLevel: "high" } }, risky, { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "sonnet" });
   assert.match(reasonOf(sonnet.out), /subagent_type "cc-improved:plan-check-sonnet"/);
-  const other = await checked({}, risky, { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "claude-opus-5-5" });
+  const other = await checked({ review: { minLevel: "high" } }, risky, { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "claude-opus-5-5" });
   assert.match(reasonOf(other.out), /subagent_type "cc-improved:plan-check", model "claude-opus-5-5"/);
   const big = await checked({ review: { plan: true } }, goodPlan({ files: ["a.js", "b.js", "c.js", "d.js", "e.js", "f.js", "g.js", "h.js", "test/a.test.js"] }), { CLAUDE_PLUGIN_OPTION_STRONG_MODEL: "claude-opus-5-5" });
   assert.match(reasonOf(big.out), /subagent_type "cc-improved:plan-check-sonnet", run_in_background/);

@@ -350,3 +350,38 @@ test("the setup and verification skills explain the tool contract without shippi
   for (const s of ["--help", "standard library", "shell.nix", "flake.nix", "references/verify-tools/python-tool.py", "--tool <python|nix>:<path>", "EXAMPLES"]) assert.ok(method.includes(s), s);
   for (const file of ["python-tool.py", "nix/check-tool.sh", "nix/shell.nix", "nix/flake.nix"]) assert.match(await readFile(path.join(templates, file), "utf8"), /TEMPLATE/, file);
 });
+
+// ---------------------------------------------------------------------------
+// Direct mode (D-015): CLAUDE.md should carry the "before finishing" and "contract first" sections; only a warning.
+// ---------------------------------------------------------------------------
+
+const SECTIONS = "# Shop\n\n## Before calling a task done\n\nRun the verify commands of .claude/workflow.json.\n\n## Contract first\n\nFollow the contract-first skill; run wf-contract-check.mjs.\n";
+
+test("CLAUDE.md without the two direct-mode sections: setup still finishes, with one warning each", async () => {
+  const root = await project();
+  const r = await run(root, ["--step", "true"]);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /setup: done/);
+  assert.match(r.out, /! CLAUDE\.md has no "Before calling a task done" section/);
+  assert.match(r.out, /! CLAUDE\.md has no "Contract first" section/);
+  assert.equal((await manifest(root)).setup, "done");
+});
+
+test("CLAUDE.md with both sections (English or translated headings) gets no warning", async () => {
+  const english = await run(await project({ ...COMPLETE, "CLAUDE.md": SECTIONS }), ["--step", "true"]);
+  assert.equal(english.code, 0, english.out);
+  assert.doesNotMatch(english.out, /CLAUDE\.md has no/);
+  const spanish = "# Tienda\n\n## Antes de terminar\n\nCorre verify.\n\n## Contrato primero\n\nUsa la skill contract-first.\n";
+  const translated = await run(await project({ ...COMPLETE, "CLAUDE.md": spanish }), ["--step", "true"]);
+  assert.doesNotMatch(translated.out, /CLAUDE\.md has no/);
+});
+
+test("only the missing section is warned about; the warning also shows when the setup is incomplete", async () => {
+  const half = await run(await project({ ...COMPLETE, "CLAUDE.md": "# Shop\n\n## Contract first\n\nSee wf-contract-check.mjs.\n" }), ["--step", "true"]);
+  assert.match(half.out, /no "Before calling a task done" section/);
+  assert.doesNotMatch(half.out, /no "Contract first"/);
+  const incomplete = await run(await project(without("GLOSSARY.md")), ["--step", "true"]);
+  assert.equal(incomplete.code, 1);
+  assert.match(incomplete.out, /Setup incomplete/);
+  assert.match(incomplete.out, /CLAUDE\.md has no "Contract first"/);
+});
