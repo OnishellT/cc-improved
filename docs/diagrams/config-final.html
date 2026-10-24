@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configuración final cc-improved</title>
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --ink:#1b2430; --muted:#5b6675; --line:#c9d0da;
+  --setup:#7c5cff; --setup-bg:#efeaff;
+  --cheap:#0f9d7a; --cheap-bg:#e3f6f0;
+  --risk:#d9822b; --risk-bg:#fff1e0;
+  --bad:#c0392b; --ok:#1e8e3e; --warn:#b7791f; --none:#6b7280;
+  --token:#ff3b6b;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#10141a; --panel:#181e27; --ink:#e8edf4; --muted:#9aa6b6; --line:#2e3846;
+    --setup:#a58bff; --setup-bg:#241d44;
+    --cheap:#37c9a4; --cheap-bg:#0f2f28;
+    --risk:#f0a050; --risk-bg:#3a2813;
+    --bad:#ff7a6b; --ok:#5bd37a; --warn:#e0b04a; --none:#9aa3b2;
+    --token:#ff5c85;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10141a; --panel:#181e27; --ink:#e8edf4; --muted:#9aa6b6; --line:#2e3846;
+  --setup:#a58bff; --setup-bg:#241d44; --cheap:#37c9a4; --cheap-bg:#0f2f28;
+  --risk:#f0a050; --risk-bg:#3a2813; --bad:#ff7a6b; --ok:#5bd37a; --warn:#e0b04a; --none:#9aa3b2; --token:#ff5c85;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:1120px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:clamp(1.5rem,3.2vw,2.1rem);margin:0 0 6px}
+.lead{color:var(--muted);margin:0 0 20px;max-width:70ch}
+.verdict{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:0 0 24px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.verdict .card b{display:block;font-size:1.5rem;line-height:1.2}
+.verdict .card span{color:var(--muted);font-size:.92rem}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 12px}
+button,select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;cursor:pointer}
+button:hover,select:hover{border-color:var(--cheap)}
+button:focus-visible,select:focus-visible,input:focus-visible,.node:focus-visible{outline:3px solid var(--token);outline-offset:2px}
+button.primary{background:var(--cheap);color:#fff;border-color:var(--cheap);font-weight:600}
+label.chk{display:flex;gap:6px;align-items:center;color:var(--muted);font-size:.95rem}
+.diagram{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:8px;overflow-x:auto}
+svg{display:block;width:100%;min-width:760px;height:auto}
+.band{rx:18;ry:18;fill-opacity:.55;stroke-width:1.2}
+.bandlabel{font-size:13px;font-weight:700;letter-spacing:.04em;text-anchor:end}
+.node{cursor:pointer}
+.node rect,.node polygon{fill:var(--panel);stroke-width:2;transition:fill .25s,stroke-width .25s,filter .25s}
+.node text{fill:var(--ink);font-size:13px;text-anchor:middle;pointer-events:none}
+.node .t1{font-weight:700;font-size:13.5px}
+.node .t2{font-size:11.5px;fill:var(--muted)}
+.node:hover rect,.node:hover polygon{stroke-width:3.2}
+.node.active rect,.node.active polygon{stroke-width:4;filter:drop-shadow(0 0 7px var(--token))}
+.node.done rect,.node.done polygon{fill-opacity:1}
+.k-setup rect{stroke:var(--setup)} .k-cheap rect,.k-cheap polygon{stroke:var(--cheap)} .k-risk rect{stroke:var(--risk)}
+.node.done.k-setup rect{fill:var(--setup-bg)} .node.done.k-cheap rect,.node.done.k-cheap polygon{fill:var(--cheap-bg)} .node.done.k-risk rect{fill:var(--risk-bg)}
+.node.optional rect{stroke-dasharray:6 5}
+.edge{fill:none;stroke:var(--line);stroke-width:2.4;stroke-linecap:round}
+.edge.dash{stroke-dasharray:3 6}
+.edge.lit{stroke:var(--token)}
+.elabel{font-size:11.5px;fill:var(--muted);text-anchor:middle}
+.token{fill:var(--token);filter:drop-shadow(0 0 6px var(--token));opacity:0}
+.token.on{opacity:1}
+.detail{margin:14px 0 28px;min-height:132px}
+.detail h3{margin:0 0 4px;font-size:1.1rem}
+.detail p{margin:4px 0}
+.badge{display:inline-block;font-size:.78rem;font-weight:700;padding:2px 9px;border-radius:99px;color:#fff;margin-right:6px;vertical-align:1px}
+.b-ok{background:#1e7a38} .b-warn{background:#8a5a00} .b-none{background:#5d6674} .b-bad{background:#b03024}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .badge{color:#0d1117}
+  :root:not([data-theme="light"]) .b-ok{background:var(--ok)} :root:not([data-theme="light"]) .b-warn{background:var(--warn)}
+  :root:not([data-theme="light"]) .b-none{background:var(--none)} :root:not([data-theme="light"]) .b-bad{background:var(--bad)}}
+h2{font-size:1.25rem;margin:32px 0 8px}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}
+.row{display:grid;grid-template-columns:150px 1fr 60px;gap:10px;align-items:center;margin:9px 0;font-size:.92rem}
+.row .name{font-weight:600}
+.row.rec .name::after{content:" ★";color:var(--cheap)}
+.track{position:relative;height:20px;background:var(--bg);border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:6px;background:var(--none);transition:width 1s cubic-bezier(.2,.8,.2,1)}
+.fill.rec{background:var(--cheap)} .fill.bad{background:var(--risk)}
+.whisker{position:absolute;top:50%;height:2px;background:var(--ink);opacity:.8;transform:translateY(-50%);transition:left 1s,width 1s}
+.whisker::before,.whisker::after{content:"";position:absolute;top:-4px;width:2px;height:10px;background:var(--ink)}
+.whisker::before{left:0}.whisker::after{right:0}
+.val{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+.note{color:var(--muted);font-size:.88rem;margin:8px 0 0}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+ul.clean{margin:6px 0 0;padding-left:20px} ul.clean li{margin:4px 0}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.chip{border:1px solid var(--line);border-radius:99px;padding:3px 12px;font-size:.88rem;background:var(--bg)}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;overflow:auto;font-size:.85rem;margin:8px 0 0}
+.sr{position:absolute;left:-9999px}
+@media (prefers-reduced-motion:reduce){.fill,.whisker,.node rect,.node polygon{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Configuración final: modelo barato + setup de opus</h1>
+  <p class="lead">Lo que mejor salió en las evals: un setup grande hecho una sola vez y el modelo barato trabajando directo. El flujo completo con gates y revisión queda solo para tareas de riesgo. Pulsa ▶ para ver una tarea recorrer el diagrama o haz clic en cualquier caja.</p>
+
+  <section class="verdict" aria-label="Resumen">
+    <div class="card"><b>~$0.26</b><span>por 10 tareas con el modelo barato (con o sin setup)</span></div>
+    <div class="card"><b>~$0.65</b><span>el setup de opus, una sola vez por proyecto</span></div>
+    <div class="card"><b>2× a 9×</b><span>lo que cuesta el flujo completo, sin mejora medida en tests</span></div>
+  </section>
+
+  <div class="toolbar" role="group" aria-label="Controles de la animación">
+    <button id="play" class="primary" aria-pressed="false">▶ Reproducir</button>
+    <button id="step">Paso ›</button>
+    <button id="reset">↺ Reiniciar</button>
+    <select id="kind" aria-label="Tipo de tarea">
+      <option value="normal">Tarea normal</option>
+      <option value="risk">Tarea de riesgo</option>
+    </select>
+    <label class="chk"><input type="checkbox" id="fail"> Simular que verify falla una vez</label>
+    <label class="chk">Velocidad <input type="range" id="speed" min="0.5" max="2.5" step="0.25" value="1" aria-label="Velocidad"></label>
+  </div>
+
+  <div class="diagram">
+  <svg id="svg" viewBox="0 0 1080 580" role="img" aria-labelledby="svgt svgd">
+    <title id="svgt">Flujo de trabajo recomendado</title>
+    <desc id="svgd">Una vez por proyecto: setup con opus. Cada tarea: ticket con interfaz, el modelo barato lee CLAUDE.md, escribe el contrato, implementa, verifica y reintenta como máximo una vez. Si hay riesgo, se usa el flujo con plan y puertas sin modelo.</desc>
+
+    <!-- bandas -->
+    <rect class="band" x="14" y="14" width="1052" height="148" style="fill:var(--setup-bg);stroke:var(--setup)"/>
+    <text class="bandlabel" x="1048" y="38" style="fill:var(--setup)">UNA VEZ POR PROYECTO · modelo grande (opus) · ~$0.65</text>
+    <rect class="band" x="14" y="176" width="1052" height="256" style="fill:var(--cheap-bg);stroke:var(--cheap)"/>
+    <text class="bandlabel" x="1048" y="200" style="fill:var(--cheap)">CADA TAREA · modelo barato (claude-haiku-5-5) · ~$0.03</text>
+    <rect class="band" x="14" y="446" width="1052" height="124" style="fill:var(--risk-bg);stroke:var(--risk)"/>
+    <text class="bandlabel" x="1048" y="470" style="fill:var(--risk)">SOLO SI HAY RIESGO · flujo /task</text>
+
+    <!-- aristas -->
+    <path id="e_A1A2" class="edge" d="M270,102 L400,102"/>
+    <path id="e_A2A3" class="edge" d="M640,102 L770,102"/>
+    <path id="e_A3B1" class="edge dash" d="M905,134 V169 H100 V240"/>
+    <path id="e_B1B2" class="edge" d="M170,272 L195,272"/>
+    <path id="e_B2B3" class="edge" d="M335,272 L360,272"/>
+    <path id="e_B3B4" class="edge" d="M500,272 L525,272"/>
+    <path id="e_B4B5" class="edge" d="M665,272 L690,272"/>
+    <path id="e_B5D" class="edge" d="M830,272 L863,272"/>
+    <path id="e_Dyes" class="edge" d="M925,312 L925,350"/>
+    <path id="e_Dno" class="edge dash" d="M925,232 V214 H595 V240"/>
+    <path id="e_B1C1" class="edge dash" d="M100,304 V490"/>
+    <path id="e_C1C2" class="edge" d="M290,522 L330,522"/>
+    <path id="e_C2B4" class="edge dash" d="M460,490 V440 H595 V304"/>
+    <path id="e_C2C3" class="edge dash" d="M590,522 L630,522"/>
+    <text class="elabel" x="950" y="336">sí</text>
+    <text class="elabel" x="760" y="231">no · reintento (máx. 1 más)</text>
+    <text class="elabel" x="60" y="396">si hay riesgo</text>
+
+    <!-- nodos A -->
+    <g class="node k-setup" id="A1" tabindex="0" role="button"><rect x="70" y="70" width="200" height="64" rx="12"/><text class="t1" x="170" y="98">Tu repo</text><text class="t2" x="170" y="118">código + CLAUDE.md humano</text></g>
+    <g class="node k-setup" id="A2" tabindex="0" role="button"><rect x="400" y="70" width="240" height="64" rx="12"/><text class="t1" x="520" y="98">/setup con opus</text><text class="t2" x="520" y="118">entrevista y escribe, una vez</text></g>
+    <g class="node k-setup" id="A3" tabindex="0" role="button"><rect x="770" y="70" width="270" height="64" rx="12"/><text class="t1" x="905" y="98">Queda en el repo</text><text class="t2" x="905" y="118">CLAUDE.md · tools/verify · skills · mode: direct</text></g>
+
+    <!-- nodos B -->
+    <g class="node k-cheap" id="B1" tabindex="0" role="button"><rect x="30" y="240" width="140" height="64" rx="12"/><text class="t1" x="100" y="268">Ticket</text><text class="t2" x="100" y="288">con la interfaz</text></g>
+    <g class="node k-cheap" id="B2" tabindex="0" role="button"><rect x="195" y="240" width="140" height="64" rx="12"/><text class="t1" x="265" y="268">Lee contexto</text><text class="t2" x="265" y="288">CLAUDE.md</text></g>
+    <g class="node k-cheap" id="B3" tabindex="0" role="button"><rect x="360" y="240" width="140" height="64" rx="12"/><text class="t1" x="430" y="268">Contrato</text><text class="t2" x="430" y="288">nombres y validación</text></g>
+    <g class="node k-cheap" id="B4" tabindex="0" role="button"><rect x="525" y="240" width="140" height="64" rx="12"/><text class="t1" x="595" y="268">Implementa</text><text class="t2" x="595" y="288">código + tests</text></g>
+    <g class="node k-cheap" id="B5" tabindex="0" role="button"><rect x="690" y="240" width="140" height="64" rx="12"/><text class="t1" x="760" y="268">Verifica</text><text class="t2" x="760" y="288">verify + tools</text></g>
+    <g class="node k-cheap" id="D" tabindex="0" role="button"><polygon points="925,232 987,272 925,312 863,272"/><text class="t1" x="925" y="276">¿pasa?</text></g>
+    <g class="node k-cheap" id="B7" tabindex="0" role="button"><rect x="845" y="350" width="160" height="56" rx="12"/><text class="t1" x="925" y="374">Listo</text><text class="t2" x="925" y="392">resumen a la persona</text></g>
+
+    <!-- nodos C -->
+    <g class="node k-risk" id="C1" tabindex="0" role="button"><rect x="30" y="490" width="260" height="64" rx="12"/><text class="t1" x="160" y="518">¿Hay riesgo?</text><text class="t2" x="160" y="538">deps · migraciones · rutas sensibles · grande</text></g>
+    <g class="node k-risk" id="C2" tabindex="0" role="button"><rect x="330" y="490" width="260" height="64" rx="12"/><text class="t1" x="460" y="518">/task: plan + puertas</text><text class="t2" x="460" y="538">nombres · contrato · verify · guards</text></g>
+    <g class="node k-risk optional" id="C3" tabindex="0" role="button"><rect x="630" y="490" width="270" height="64" rx="12"/><text class="t1" x="765" y="518">Revisión con modelo</text><text class="t2" x="765" y="538">apagada por defecto · tú la activas</text></g>
+
+    <circle id="token" class="token" r="9" cx="0" cy="0"/>
+  </svg>
+  </div>
+
+  <div class="card detail" id="detail" aria-live="polite">
+    <h3>Haz clic en una caja</h3>
+    <p>Aquí aparece qué hace cada paso, cuánto cuesta y <b>cuánta evidencia hay</b> de que ayude.</p>
+  </div>
+
+  <h2>Qué dicen los números</h2>
+  <p class="note" style="margin-top:0">Tests ocultos pasados sobre 436 posibles, media de las ejecuciones. La raya negra es el rango entre ejecuciones. Los brazos con n=1 no tienen rango.</p>
+  <div class="charts">
+    <div class="card">
+      <div class="toolbar" style="margin-bottom:4px"><b>Calidad (tests)</b>
+        <label class="chk"><input type="checkbox" id="zoom"> ampliar eje 300–360 (recortado)</label></div>
+      <div id="chartQ"></div>
+      <p class="note" id="zoomnote">Eje completo 0–436: las barras casi no se distinguen, y eso es honesto.</p>
+    </div>
+    <div class="card">
+      <b>Coste por 10 tareas</b>
+      <div id="chartC"></div>
+      <p class="note">El setup de opus (~$0.65) se paga una vez por proyecto y no está incluido en D0s.</p>
+    </div>
+  </div>
+
+  <h2>Configuración final</h2>
+  <div class="two">
+    <div class="card">
+      <b>Haz esto</b>
+      <ul class="clean">
+        <li>Corre <code>/cc-improved:setup</code> una vez (opus escribe el <code>CLAUDE.md</code> y las herramientas).</li>
+        <li>Trabaja con <code>claude-haiku-5-5</code> con el id completo, no con el alias.</li>
+        <li>Pon en el ticket los <b>nombres, firmas y qué pasa con entradas inválidas</b>.</li>
+        <li>Usa <code>/task</code> solo con dependencias, migraciones o rutas sensibles.</li>
+      </ul>
+      <pre>// .claude/workflow.json (lo esencial)
+{
+  "mode": "direct",
+  "verify": ["…comandos de tu proyecto…"]
+  // sin "review": revisión y plan-check apagados
+}</pre>
+    </div>
+    <div class="card">
+      <b>No uses (todavía)</b>
+      <div class="chips">
+        <span class="chip">revisor por defecto</span><span class="chip">plan-check por defecto</span>
+        <span class="chip">meta-harness</span><span class="chip">RLM</span><span class="chip">afinar el modelo</span>
+        <span class="chip">RTK: sin ahorro medido</span>
+      </div>
+      <p class="note">Sin pruebas en tareas de código reales a este tamaño, o con coste que supera lo que aportan.</p>
+      <b style="display:block;margin-top:14px">Sin probar o con fallos</b>
+      <ul class="clean">
+        <li>La skill <code>contract-first</code>: el modelo no la usó (0 de 30).</li>
+        <li>La validación de entradas sigue siendo el fallo principal.</li>
+        <li><code>wf-contract-check</code> no aparece en el PATH en modo <code>-p</code>.</li>
+        <li>Solo un repo y pocas repeticiones: la mejora de +10 tests puede ser ruido.</li>
+      </ul>
+    </div>
+  </div>
+</main>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var svg = document.getElementById("svg");
+  var token = document.getElementById("token");
+  var detail = document.getElementById("detail");
+  var $ = function(id){return document.getElementById(id)};
+
+  var INFO = {
+    A1:{t:"Tu repo",b:"Punto de partida: tu código y, si ya existe, tu CLAUDE.md escrito por una persona.",c:"Sin coste.",e:["none","—"]},
+    A2:{t:"/setup con opus",b:"Opus recorre el repo, hace unas preguntas y escribe los archivos de contexto y las herramientas de verificación (python estándar o nix). Se hace una vez y se reutiliza.",c:"$0.52–0.98 por proyecto (media $0.71 en 7 setups; el último, $0.63).",e:["warn","Coste medido. Que mejore la calidad NO está demostrado: +7.7 tests de media, dentro del ruido."]},
+    A3:{t:"Queda en el repo",b:"CLAUDE.md con dos secciones cortas (“Antes de terminar” y “Contrato primero”, 12 líneas), herramientas en tools/verify, skills del proyecto y workflow.json con mode: direct.",c:"Se relee en cada turno del modelo barato, por eso se mantiene corto.",e:["ok","Un setup real lo generó bien, en 12 líneas (n=1)."]},
+    B1:{t:"Ticket con la interfaz",b:"Escribe en el ticket los nombres exactos, la firma, qué recibe y devuelve y qué pasa con entradas inválidas. Evita que el modelo barato invente nombres o formas.",c:"Sin coste extra.",e:["ok","Mayor palanca medida: +28 a +39 tests de 121 en las 3 celdas con y sin pista."]},
+    B2:{t:"Lee el contexto",b:"El modelo barato (claude-haiku-5-5, id completo; el alias haiku se factura como sonnet en plan mode) lee el CLAUDE.md que dejó el setup.",c:"~$0.026 por tarea (media de las ejecuciones de D0).",e:["ok","Coste medido con n=3 por celda."]},
+    B3:{t:"Contrato primero",b:"Antes de editar escribe qué va a crear: nombres, firmas, comportamiento ante entradas inválidas. La skill contract-first y wf-contract-check lo apoyan.",c:"Casi sin coste.",e:["warn","El brazo con contrato sacó +10.4 tests, pero el modelo no usó la skill (0/30) y escribió contract.json en 8/30. La mejora no es atribuible a la skill y puede ser ruido."]},
+    B4:{t:"Implementa",b:"Escribe el código y los tests. Cada comportamiento decidido para entradas inválidas debe tener su test.",c:"Aquí se gasta casi todo el coste de la tarea.",e:["bad","La validación de entradas es el fallo dominante: unos 40–43 tests fallidos por pasada y no bajó con las instrucciones."]},
+    B5:{t:"Verifica",b:"Ejecuta el verify del manifest, las herramientas de tools/verify y wf-contract-check. No se da por terminado si algo falla.",c:"Casi sin coste de modelo (son comandos).",e:["warn","Límite: los tests visibles pasaban en 60/60 ejecuciones y aun así 54/60 fallaban tests ocultos. Verificar ayuda, pero no basta."]},
+    D:{t:"¿Pasa?",b:"Si falla, un reintento con el informe. Si vuelve a fallar, el agente termina con FAILED y avisa a la persona. Máximo 2 intentos.",c:"Cada reintento cuesta otra pasada de implementación.",e:["ok","Terminar a tiempo ahorra: las ejecuciones fallidas hacen más llamadas (79.5 frente a 61.7 por parche)."]},
+    B7:{t:"Listo",b:"Resumen corto a la persona con lo que verificó y lo que no.",c:"—",e:["none","—"]},
+    C1:{t:"¿Hay riesgo?",b:"Dependencias nuevas, migraciones, rutas sensibles o un cambio grande (8 archivos o más). Si no hay nada de eso, sigues el flujo normal de arriba.",c:"Se calcula en código, sin modelo.",e:["ok","El nivel de riesgo se registra aunque no pida revisión."]},
+    C2:{t:"/task: plan y puertas",b:"Plan mode con puertas que no usan modelo: nombres verificados, contrato de interfaz, verify del manifest y guards de archivos fuera del plan.",c:"~$0.05 por tarea (D1v2 sin revisión: $0.51 por 10 tareas), unas 2× el modelo barato solo.",e:["warn","Sin mejora medible en tests frente al modelo barato solo (329 frente a 336), n=1. Su valor son las garantías, que la eval no mide."]},
+    C3:{t:"Revisión con modelo",b:"Un revisor con modelo fuerte mira el diff. Está apagada por defecto: la activas con review.always o review.minLevel en el manifest.",c:"En D1v2 fue el 63% del coste (revisor 37%, plan-check 26%).",e:["bad","0 rondas de arreglo en 20 revisiones, y el plan-check devolvió FIX 16/16: no aportaron calidad medible."]}
+  };
+  var EV = {ok:["b-ok","Medido"],warn:["b-warn","Medido, pero poco concluyente"],none:["b-none","Sin evidencia necesaria"],bad:["b-bad","Evidencia en contra o fallo medido"]};
+
+  function showInfo(id){
+    var i = INFO[id]; if(!i) return;
+    var ev = EV[i.e[0]];
+    detail.innerHTML = "<h3></h3><p></p><p><b>Coste:</b> <span class='c'></span></p><p><span class='badge "+ev[0]+"'>"+ev[1]+"</span><span class='e'></span></p>";
+    detail.querySelector("h3").textContent = i.t;
+    detail.querySelectorAll("p")[0].textContent = i.b;
+    detail.querySelector(".c").textContent = i.c;
+    detail.querySelector(".e").textContent = i.e[1];
+  }
+  Object.keys(INFO).forEach(function(id){
+    var n = $(id);
+    n.addEventListener("click", function(){ showInfo(id); });
+    n.addEventListener("keydown", function(ev){ if(ev.key==="Enter"||ev.key===" "){ev.preventDefault(); showInfo(id);} });
+  });
+
+  /* --- secuencias --- */
+  function build(kind, fail){
+    var s = [["A1"],["e_A1A2","A2"],["e_A2A3","A3"],["e_A3B1","B1"]];
+    if(kind==="risk"){
+      s.push(["e_B1C1","C1"],["e_C1C2","C2"],["e_C2B4","B4"],["e_B4B5","B5"],["e_B5D","D"]);
+    }else{
+      s.push(["e_B1B2","B2"],["e_B2B3","B3"],["e_B3B4","B4"],["e_B4B5","B5"],["e_B5D","D"]);
+    }
+    if(fail){ s.push(["e_Dno","B4"],["e_B4B5","B5"],["e_B5D","D"]); }
+    s.push(["e_Dyes","B7"]);
+    return s;
+  }
+  var seq = [], idx = -1, playing = false, anim = null, timer = null;
+
+  function clearAll(){
+    document.querySelectorAll(".node").forEach(function(n){n.classList.remove("active","done")});
+    document.querySelectorAll(".edge").forEach(function(e){e.classList.remove("lit")});
+    token.classList.remove("on");
+  }
+  function reset(){
+    stopAnim(); setPlaying(false); idx = -1;
+    seq = build($("kind").value, $("fail").checked);
+    clearAll();
+  }
+  function stopAnim(){ if(anim){cancelAnimationFrame(anim);anim=null} if(timer){clearTimeout(timer);timer=null} }
+  function setPlaying(p){
+    playing = p;
+    var b = $("play"); b.textContent = p ? "⏸ Pausa" : "▶ Reproducir"; b.setAttribute("aria-pressed", String(p));
+  }
+  function arrive(id){
+    document.querySelectorAll(".node.active").forEach(function(n){n.classList.remove("active"); n.classList.add("done")});
+    var n = $(id); n.classList.remove("done"); n.classList.add("active");
+    showInfo(id);
+  }
+  function runStep(done){
+    if(idx >= seq.length-1){ if(done) done(false); return; }
+    idx++;
+    var st = seq[idx], dur = 900 / parseFloat($("speed").value);
+    if(st.length===1){ arrive(st[0]); token.classList.remove("on"); timer = setTimeout(function(){ if(done) done(true); }, reduce?200:dur*0.6); return; }
+    var path = $(st[0]); path.classList.add("lit");
+    var len = path.getTotalLength();
+    if(reduce){ arrive(st[1]); timer = setTimeout(function(){ if(done) done(true); }, 300); return; }
+    token.classList.add("on");
+    var t0 = null;
+    function frame(ts){
+      if(t0===null) t0 = ts;
+      var k = Math.min(1,(ts-t0)/(dur*Math.max(0.5,Math.min(1.6,len/150))));
+      var e = k<.5 ? 2*k*k : 1-Math.pow(-2*k+2,2)/2;
+      var p = path.getPointAtLength(len*e);
+      token.setAttribute("cx",p.x); token.setAttribute("cy",p.y);
+      if(k<1){ anim = requestAnimationFrame(frame); }
+      else { anim=null; arrive(st[1]); timer = setTimeout(function(){ if(done) done(true); }, dur*0.45); }
+    }
+    anim = requestAnimationFrame(frame);
+  }
+  function loop(){
+    if(!playing) return;
+    runStep(function(more){
+      if(!playing) return;
+      if(more){ loop(); } else { setPlaying(false); }
+    });
+  }
+  $("play").addEventListener("click", function(){
+    if(playing){ setPlaying(false); return; }
+    if(idx >= seq.length-1){ reset(); }
+    setPlaying(true); loop();
+  });
+  $("step").addEventListener("click", function(){
+    if(playing){ setPlaying(false); }
+    if(anim||timer){ stopAnim(); }
+    if(idx >= seq.length-1){ reset(); }
+    runStep(null);
+  });
+  $("reset").addEventListener("click", reset);
+  $("kind").addEventListener("change", reset);
+  $("fail").addEventListener("change", reset);
+
+  /* --- gráficos --- */
+  var ARMS = [
+    {n:"D0 · barato solo",       q:328.7, lo:319, hi:345, c:0.248, k:""},
+    {n:"D0s · + setup",          q:336.3, lo:329, hi:343, c:0.252, k:""},
+    {n:"D0s + contrato",         q:346.7, lo:343, hi:350, c:0.264, k:"rec"},
+    {n:"D1v2 sin revisión",      q:329,   lo:null,hi:null,c:0.506, k:"bad"},
+    {n:"D1v2 con revisión",      q:333,   lo:null,hi:null,c:2.12,  k:"bad"},
+    {n:"D1 v1 (plugin completo)",q:337,   lo:null,hi:null,c:2.41,  k:"bad"}
+  ];
+  function mk(host, rows){ host.innerHTML=""; rows.forEach(function(r){
+    var d=document.createElement("div"); d.className="row"+(r.k==="rec"?" rec":"");
+    d.innerHTML="<div class='name'></div><div class='track'><div class='fill "+r.k+"'></div><div class='whisker' style='display:none'></div></div><div class='val'></div>";
+    d.querySelector(".name").textContent=r.n; d.querySelector(".val").textContent=r.v; host.appendChild(d);
+  }); }
+  function drawQ(){
+    var zoom=$("zoom").checked, min=zoom?300:0, max=zoom?360:436, host=$("chartQ");
+    if(!host.children.length) mk(host, ARMS.map(function(a){return {n:a.n,k:a.k,v:a.q.toFixed(1)}}));
+    [].forEach.call(host.querySelectorAll(".row"), function(row,i){
+      var a=ARMS[i], f=row.querySelector(".fill"), w=row.querySelector(".whisker");
+      var pct=function(x){return Math.max(0,Math.min(100,(x-min)/(max-min)*100))};
+      f.style.width=pct(a.q)+"%";
+      if(a.lo!==null){ w.style.display="block"; w.style.left=pct(a.lo)+"%"; w.style.width=(pct(a.hi)-pct(a.lo))+"%"; } else { w.style.display="none"; }
+    });
+    $("zoomnote").textContent = zoom ? "Eje recortado a 300–360: exagera las diferencias. Los rangos de D0, D0s y D0s+contrato se solapan casi por completo." : "Eje completo 0–436: las barras casi no se distinguen, y eso es honesto.";
+  }
+  function drawC(){
+    var host=$("chartC"), max=2.5;
+    if(!host.children.length) mk(host, ARMS.map(function(a){return {n:a.n,k:a.k,v:"$"+a.c.toFixed(2)}}));
+    [].forEach.call(host.querySelectorAll(".row"), function(row,i){
+      row.querySelector(".fill").style.width=(ARMS[i].c/max*100)+"%";
+    });
+  }
+  $("zoom").addEventListener("change", drawQ);
+  function reveal(){ drawQ(); drawC(); }
+  if(reduce){ reveal(); }
+  else if("IntersectionObserver" in window){
+    mk($("chartQ"), ARMS.map(function(a){return {n:a.n,k:a.k,v:a.q.toFixed(1)}}));
+    mk($("chartC"), ARMS.map(function(a){return {n:a.n,k:a.k,v:"$"+a.c.toFixed(2)}}));
+    var shown=false, go=function(){ if(!shown){ shown=true; reveal(); } };
+    var io=new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ go(); io.disconnect(); } }); },{threshold:.25});
+    io.observe($("chartQ"));
+    setTimeout(go, 2500); /* respaldo: si el observador no dispara, las barras igualmente aparecen */
+  } else { reveal(); }
+
+  reset();
+  showInfo("A2");
+})();
+</script>
+</body>
+</html>
