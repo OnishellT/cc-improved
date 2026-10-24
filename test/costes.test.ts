@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readlink, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -66,6 +66,28 @@ test("apply-global --dry-run says what it would do and writes nothing", async ()
   assert.equal(await readFile(path.join(dir, "CLAUDE.md"), "utf8"), "@RTK.md\n");
   await assert.rejects(stat(path.join(dir, "cost-hygiene.md")));
   await assert.rejects(stat(path.join(dir, "settings.json.pre-cost-controls")));
+  await assert.rejects(stat(path.join(dir, "agents")));
+});
+
+test("apply-global creates a missing settings.json as 0600 and writes through a symlinked CLAUDE.md", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "costes-home-"));
+  const real = path.join(dir, "managed-CLAUDE.md");
+  await writeFile(real, "@RTK.md\n");
+  await symlink(real, path.join(dir, "CLAUDE.md"));
+
+  const result = await run(apply, ["--home", dir]);
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /^created +\S+settings\.json$/m);
+
+  const settings = path.join(dir, "settings.json");
+  assert.equal((await stat(settings)).mode & 0o777, 0o600);
+  assert.equal(JSON.parse(await readFile(settings, "utf8")).autoCompactWindow, 200000);
+  await assert.rejects(stat(`${settings}.pre-cost-controls`)); // nothing to back up
+
+  // the link is still a link to the same file, and the file carries the import
+  assert.ok((await lstat(path.join(dir, "CLAUDE.md"))).isSymbolicLink());
+  assert.equal(await readlink(path.join(dir, "CLAUDE.md")), real);
+  assert.equal(await readFile(real, "utf8"), "@RTK.md\n@cost-hygiene.md\n");
 });
 
 test("the global implementer agent runs on sonnet with a one-hour prompt cache", async () => {

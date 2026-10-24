@@ -3,10 +3,12 @@
 //   1. merges global/settings.fragment.json into settings.json (the original is kept once, as settings.json.pre-cost-controls)
 //   2. copies global/cost-hygiene.md and imports it from CLAUDE.md
 //   3. copies global/issue-implementer.md to agents/
+// A missing settings.json is created. A target that is a symlink is written through, not replaced. cost-hygiene.md and
+// agents/issue-implementer.md are overwritten when they differ: they come from this repo.
 // Run as: node docs/costes/apply-global.mjs [--dry-run] [--home ~/.claude]
 // Roll back: restore settings.json.pre-cost-controls, delete the import line in CLAUDE.md, cost-hygiene.md and
 // agents/issue-implementer.md.
-import { chmod, copyFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,13 +36,15 @@ function merge(dst, src) {
   return dst;
 }
 
-/** Atomic and mode-preserving: the settings file is 0600. */
-async function write(file, text) {
-  const tmp = `${file}.${process.pid}.tmp`;
-  await writeFile(tmp, text);
-  const old = await stat(file).catch(() => undefined);
-  if (old) await chmod(tmp, old.mode & 0o777);
-  await rename(tmp, file);
+/** Atomic, mode-preserving (settings.json is 0600) and written through a symlink instead of replacing it. */
+async function write(file, text, newMode = 0o644) {
+  const target = await realpath(file).catch(() => file);
+  const tmp = `${target}.${process.pid}.tmp`;
+  const old = await stat(target).catch(() => undefined);
+  const mode = old ? old.mode & 0o777 : newMode;
+  await writeFile(tmp, text, { mode }); // never created wider than the target will be
+  await chmod(tmp, mode); // writeFile applies the umask; the target keeps its exact mode
+  await rename(tmp, target);
 }
 
 async function install(src, dst) {
@@ -56,16 +60,18 @@ async function install(src, dst) {
 
 // 1. settings.json
 const settingsFile = path.join(home, "settings.json");
-const settings = JSON.parse(await readFile(settingsFile, "utf8"));
+const original = await read(settingsFile);
+const settings = original === undefined ? {} : JSON.parse(original);
 const before = JSON.stringify(settings);
 const fragment = JSON.parse(await readFile(path.join(here, "global/settings.fragment.json"), "utf8"));
 const changed = JSON.stringify(merge(settings, fragment)) !== before;
 if (changed && !dryRun) {
   const backup = `${settingsFile}.pre-cost-controls`;
-  if (!(await stat(backup).catch(() => undefined))) await copyFile(settingsFile, backup);
-  await write(settingsFile, `${JSON.stringify(settings, null, 2)}\n`);
+  if (original !== undefined && !(await stat(backup).catch(() => undefined))) await copyFile(settingsFile, backup);
+  await mkdir(home, { recursive: true });
+  await write(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, 0o600);
 }
-say(settingsFile, changed ? "updated" : "unchanged");
+say(settingsFile, !changed ? "unchanged" : original === undefined ? "created" : "updated");
 
 // 2. hygiene rules and the import line
 await install(path.join(here, "global/cost-hygiene.md"), path.join(home, "cost-hygiene.md"));
